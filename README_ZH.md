@@ -1,6 +1,6 @@
 [English](README.md)
 
-# Agent Cowork
+# Claude Cowork
 
 一个**桌面 AI 助手**，帮助你完成**编程、文件管理以及任何你能描述的任务**，  
 
@@ -16,7 +16,7 @@
 
 ---
 
-## ✨ 为什么选择 Agent Cowork？
+## ✨ 为什么选择 Claude Cowork？
 
 Claude Code 很强大 — 但它**只能在终端中运行**。
 
