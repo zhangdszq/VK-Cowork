@@ -12,7 +12,7 @@
 
 一个整理本地文件夹的例子：
 
-https://github.com/user-attachments/assets/694430fb-9d4b-452e-8429-d9c565082f43
+[https://github.com/user-attachments/assets/694430fb-9d4b-452e-8429-d9c565082f43](https://github.com/user-attachments/assets/8ce58c8b-4024-4c01-82ee-f8d8ed6d4bba)
 
 ---
 
