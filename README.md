@@ -159,25 +159,6 @@ bun run dev
 # Type checking / build
 bun run build
 
-# Linting
-bun run lint
-
-
-### Project Structure
-
-
-src/
-├── electron/            # Main process
-│   ├── main.ts          # App entry & window management
-│   ├── ipc-handlers.ts  # IPC event handlers
-│   └── libs/
-│       ├── runner.ts        # Claude SDK integration
-│       └── session-store.ts # SQLite persistence
-└── ui/                  # Renderer process (React)
-    ├── App.tsx          # Main app component
-    ├── store/           # Zustand state management
-    └── components/      # UI components
-
 
 ---
 
