@@ -1,6 +1,6 @@
 [简体中文](README_ZH.md)
 
-# Claude Cowork （opensource version）
+# Claude Cowork
 
 A **desktop AI assistant** that helps you with **programming, file management, and any task you can describe**.
 
