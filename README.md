@@ -21,8 +21,7 @@ With Open Source Claude Cowork, M2.1 takes a concrete step toward our long-term 
 
 ---
 
-
-# Claude Cowork
+# About Open Claude Cowork
 
 A **desktop AI assistant** that helps you with **programming, file management, and any task you can describe**.
 
