@@ -13,7 +13,12 @@
     ],
     "icon": "./claude-color.png",
     "mac": {
-        "target": "dmg"
+        "target": "dmg",
+        "entitlements": "build/entitlements.mac.plist",
+        "entitlementsInherit": "build/entitlements.mac.plist",
+        "hardenedRuntime": true,
+        "gatekeeperAssess": false,
+        "notarize": true
     },
     "linux": {
         "target": "AppImage",
@@ -21,8 +26,7 @@
     },
     "win": {
         "target": [
-            "portable",
-            "msi"
+            "portable"
         ]
     }
 }

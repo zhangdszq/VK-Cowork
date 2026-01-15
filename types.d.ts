@@ -10,6 +10,40 @@ type StaticData = {
     totalMemoryGB: number;
 }
 
+type UserSettings = {
+    anthropicBaseUrl?: string;
+    anthropicAuthToken?: string;
+}
+
+type EnvironmentCheck = {
+    id: string;
+    name: string;
+    status: 'ok' | 'warning' | 'error' | 'checking';
+    message: string;
+}
+
+type EnvironmentCheckResult = {
+    checks: EnvironmentCheck[];
+    allPassed: boolean;
+}
+
+type ValidateApiResult = {
+    valid: boolean;
+    message: string;
+}
+
+type FolderAccessResult = {
+    granted: boolean;
+    path: string | null;
+    bookmark?: string;
+}
+
+type InstallResult = {
+    success: boolean;
+    message: string;
+    output?: string;
+}
+
 type UnsubscribeFunction = () => void;
 
 type EventPayloadMapping = {
@@ -18,6 +52,18 @@ type EventPayloadMapping = {
     "generate-session-title": string;
     "get-recent-cwds": string[];
     "select-directory": string | null;
+    "get-user-settings": UserSettings;
+    "save-user-settings": boolean;
+    "check-environment": EnvironmentCheckResult;
+    "validate-api-config": ValidateApiResult;
+    "request-folder-access": FolderAccessResult;
+    "open-privacy-settings": boolean;
+    "install-claude-cli": InstallResult;
+    "is-claude-cli-installed": boolean;
+    "select-image": string | null;
+    "save-pasted-image": string | null;
+    "install-nodejs": InstallResult;
+    "install-sdk": InstallResult;
 }
 
 interface Window {
@@ -30,5 +76,20 @@ interface Window {
         generateSessionTitle: (userInput: string | null) => Promise<string>;
         getRecentCwds: (limit?: number) => Promise<string[]>;
         selectDirectory: () => Promise<string | null>;
+        getUserSettings: () => Promise<UserSettings>;
+        saveUserSettings: (settings: UserSettings) => Promise<boolean>;
+        checkEnvironment: () => Promise<EnvironmentCheckResult>;
+        validateApiConfig: (baseUrl?: string, authToken?: string) => Promise<ValidateApiResult>;
+        requestFolderAccess: (folderPath?: string) => Promise<FolderAccessResult>;
+        openPrivacySettings: () => Promise<boolean>;
+        installClaudeCLI: () => Promise<InstallResult>;
+        isClaudeCLIInstalled: () => Promise<boolean>;
+        onInstallProgress: (callback: (message: string) => void) => UnsubscribeFunction;
+        // Image selection (path only, Agent uses built-in analyze_image tool)
+        selectImage: () => Promise<string | null>;
+        savePastedImage: (base64Data: string, mimeType: string) => Promise<string | null>;
+        // Install tools
+        installNodeJs: () => Promise<InstallResult>;
+        installSdk: () => Promise<InstallResult>;
     }
 }

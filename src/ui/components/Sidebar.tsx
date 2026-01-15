@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAppStore } from "../store/useAppStore";
+import { SettingsModal } from "./SettingsModal";
 
 interface SidebarProps {
   connected: boolean;
@@ -19,6 +20,7 @@ export function Sidebar({
   const [resumeSessionId, setResumeSessionId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const formatCwd = (cwd?: string) => {
     if (!cwd) return "Working dir unavailable";
@@ -95,6 +97,13 @@ export function Sidebar({
             tabIndex={0}
           >
             <div className="flex items-center justify-between gap-2">
+              {/* 运行状态指示器 */}
+              {session.status === "running" && (
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-info opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-info" />
+                </span>
+              )}
               <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
                 <div className={`text-[12px] font-medium ${session.status === "running" ? "text-info" : session.status === "completed" ? "text-success" : session.status === "error" ? "text-error" : "text-ink-800"}`}>
                   {session.title}
@@ -161,6 +170,22 @@ export function Sidebar({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Settings Button */}
+      <div className="mt-auto pt-4 border-t border-ink-900/5">
+        <button
+          onClick={() => setShowSettings(true)}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted hover:bg-surface-tertiary hover:text-ink-700 transition-colors"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          API Settings
+        </button>
+      </div>
+
+      <SettingsModal open={showSettings} onOpenChange={setShowSettings} />
     </aside>
   );
 }

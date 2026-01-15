@@ -1,0 +1,45 @@
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { app } from "electron";
+
+export interface UserSettings {
+  anthropicBaseUrl?: string;
+  anthropicAuthToken?: string;
+}
+
+const SETTINGS_FILE = join(app.getPath("userData"), "user-settings.json");
+
+function ensureDirectory() {
+  const dir = dirname(SETTINGS_FILE);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+
+export function loadUserSettings(): UserSettings {
+  try {
+    if (!existsSync(SETTINGS_FILE)) {
+      return {};
+    }
+    const raw = readFileSync(SETTINGS_FILE, "utf8");
+    return JSON.parse(raw) as UserSettings;
+  } catch {
+    return {};
+  }
+}
+
+export function saveUserSettings(settings: UserSettings): void {
+  ensureDirectory();
+  writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf8");
+}
+
+export function getUserSetting<K extends keyof UserSettings>(key: K): UserSettings[K] {
+  const settings = loadUserSettings();
+  return settings[key];
+}
+
+export function setUserSetting<K extends keyof UserSettings>(key: K, value: UserSettings[K]): void {
+  const settings = loadUserSettings();
+  settings[key] = value;
+  saveUserSettings(settings);
+}

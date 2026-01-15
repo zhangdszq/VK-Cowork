@@ -28,7 +28,38 @@ electron.contextBridge.exposeInMainWorld("electron", {
     getRecentCwds: (limit?: number) => 
         ipcInvoke("get-recent-cwds", limit),
     selectDirectory: () => 
-        ipcInvoke("select-directory")
+        ipcInvoke("select-directory"),
+    getUserSettings: () => 
+        ipcInvoke("get-user-settings"),
+    saveUserSettings: (settings: any) => 
+        ipcInvoke("save-user-settings", settings),
+    checkEnvironment: () => 
+        ipcInvoke("check-environment"),
+    validateApiConfig: (baseUrl?: string, authToken?: string) => 
+        ipcInvoke("validate-api-config", baseUrl, authToken),
+    requestFolderAccess: (folderPath?: string) => 
+        ipcInvoke("request-folder-access", folderPath),
+    openPrivacySettings: () => 
+        ipcInvoke("open-privacy-settings"),
+    installClaudeCLI: () => 
+        ipcInvoke("install-claude-cli"),
+    isClaudeCLIInstalled: () => 
+        ipcInvoke("is-claude-cli-installed"),
+    onInstallProgress: (callback: (message: string) => void) => {
+        const cb = (_: Electron.IpcRendererEvent, message: string) => callback(message);
+        electron.ipcRenderer.on("install-progress", cb);
+        return () => electron.ipcRenderer.off("install-progress", cb);
+    },
+    // Image selection (path only, Agent uses built-in analyze_image tool)
+    selectImage: () => 
+        ipcInvoke("select-image"),
+    savePastedImage: (base64Data: string, mimeType: string) => 
+        ipcInvoke("save-pasted-image", base64Data, mimeType),
+    // Install tools
+    installNodeJs: () => 
+        ipcInvoke("install-nodejs"),
+    installSdk: () => 
+        ipcInvoke("install-sdk")
 } satisfies Window['electron'])
 
 function ipcInvoke<Key extends keyof EventPayloadMapping>(key: Key, ...args: any[]): Promise<EventPayloadMapping[Key]> {

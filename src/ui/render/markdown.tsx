@@ -1,9 +1,10 @@
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
-export default function MDContent({ text }: { text: string }) {
+export default memo(function MDContent({ text }: { text: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -43,5 +44,5 @@ export default function MDContent({ text }: { text: string }) {
     >
       {String(text ?? "")}
     </ReactMarkdown>
-  )
-}
+  );
+});

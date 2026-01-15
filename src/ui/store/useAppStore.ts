@@ -137,13 +137,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       case "session.history": {
-        const { sessionId, messages, status } = event.payload;
+        const { sessionId, messages, status, pendingPermissions } = event.payload;
         set((state) => {
           const existing = state.sessions[sessionId] ?? createSession(sessionId);
+          // Restore pending permissions from backend
+          const restoredPermissions: PermissionRequest[] = (pendingPermissions ?? []).map(p => ({
+            toolUseId: p.toolUseId,
+            toolName: p.toolName,
+            input: p.input
+          }));
           return {
             sessions: {
               ...state.sessions,
-              [sessionId]: { ...existing, status, messages, hydrated: true }
+              [sessionId]: { 
+                ...existing, 
+                status, 
+                messages, 
+                hydrated: true,
+                // Merge existing permissions with restored ones (avoid duplicates)
+                permissionRequests: [
+                  ...existing.permissionRequests.filter(
+                    req => !restoredPermissions.some(r => r.toolUseId === req.toolUseId)
+                  ),
+                  ...restoredPermissions
+                ]
+              }
             }
           };
         });

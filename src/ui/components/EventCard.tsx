@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type {
   PermissionResult,
   SDKAssistantMessage,
@@ -110,7 +110,8 @@ const ToolResult = ({ messageContent }: { messageContent: ToolResultContent }) =
   const isFirstRender = useRef(true);
   let lines: string[] = [];
   
-  if (messageContent.type !== "tool_result") return null;
+  // Type guard for tool_result
+  if (typeof messageContent === "string" || messageContent.type !== "tool_result") return null;
   
   const toolUseId = messageContent.tool_use_id;
   const status: ToolStatus = messageContent.is_error ? "error" : "success";
@@ -283,7 +284,7 @@ const UserMessageCard = ({ message, showIndicator = false }: { message: { type: 
   </div>
 );
 
-export function MessageCard({
+export const MessageCard = memo(function MessageCard({
   message,
   isLast = false,
   isRunning = false,
@@ -348,10 +349,14 @@ export function MessageCard({
 
   if (sdkMessage.type === "user") {
     const contents = sdkMessage.message.content;
+    // Handle string content
+    if (typeof contents === "string") {
+      return null;
+    }
     return (
       <>
         {contents.map((content: ToolResultContent, idx: number) => {
-          if (content.type === "tool_result") {
+          if (typeof content !== "string" && content.type === "tool_result") {
             return <ToolResult key={idx} messageContent={content} />;
           }
           return null;
@@ -361,6 +366,6 @@ export function MessageCard({
   }
 
   return null;
-}
+});
 
 export { MessageCard as EventCard };

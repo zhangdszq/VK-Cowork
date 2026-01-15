@@ -2,6 +2,7 @@ import type { ClaudeSettingsEnv } from "../types.js";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { loadUserSettings } from "./user-settings.js";
 
 const CLAUDE_SETTINGS_ENV_KEYS = [
   "ANTHROPIC_AUTH_TOKEN",
@@ -15,12 +16,25 @@ const CLAUDE_SETTINGS_ENV_KEYS = [
 ] as const;
 
 export function loadClaudeSettingsEnv(): ClaudeSettingsEnv {
+  // First, load user settings (highest priority)
+  const userSettings = loadUserSettings();
+  
+  // Apply user settings to process.env if set
+  if (userSettings.anthropicAuthToken) {
+    process.env.ANTHROPIC_AUTH_TOKEN = userSettings.anthropicAuthToken;
+  }
+  if (userSettings.anthropicBaseUrl) {
+    process.env.ANTHROPIC_BASE_URL = userSettings.anthropicBaseUrl;
+  }
+
+  // Then load ~/.claude/settings.json as fallback
   try {
     const settingsPath = join(homedir(), ".claude", "settings.json");
     const raw = readFileSync(settingsPath, "utf8");
     const parsed = JSON.parse(raw) as { env?: Record<string, unknown> };
     if (parsed.env) {
       for (const [key, value] of Object.entries(parsed.env)) {
+        // Only apply if not already set (user settings take priority)
         if (process.env[key] === undefined && value !== undefined && value !== null) {
           process.env[key] = String(value);
         }
@@ -37,4 +51,13 @@ export function loadClaudeSettingsEnv(): ClaudeSettingsEnv {
   return env;
 }
 
-export const claudeCodeEnv = loadClaudeSettingsEnv();
+// Reload settings (called when user updates settings)
+export function reloadClaudeSettings(): ClaudeSettingsEnv {
+  // Clear existing env vars to allow reload
+  for (const key of CLAUDE_SETTINGS_ENV_KEYS) {
+    delete process.env[key];
+  }
+  return loadClaudeSettingsEnv();
+}
+
+export let claudeCodeEnv = loadClaudeSettingsEnv();

@@ -7,13 +7,21 @@ import { Sidebar } from "./components/Sidebar";
 import { StartSessionModal } from "./components/StartSessionModal";
 import { PromptInput, usePromptActions } from "./components/PromptInput";
 import { MessageCard } from "./components/EventCard";
+import { MessageSkeleton } from "./components/MessageSkeleton";
 import MDContent from "./render/markdown";
+
+// 按 session 存储的 partialMessage 状态
+type SessionPartialState = {
+  content: string;
+  isVisible: boolean;
+};
 
 function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const partialMessageRef = useRef("");
-  const [partialMessage, setPartialMessage] = useState("");
-  const [showPartialMessage, setShowPartialMessage] = useState(false);
+  
+  // 使用 Map 按 sessionId 存储每个 session 的 partial message 状态
+  const partialMessagesRef = useRef<Map<string, string>>(new Map());
+  const [partialMessages, setPartialMessages] = useState<Map<string, SessionPartialState>>(new Map());
 
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
@@ -42,31 +50,48 @@ function App() {
     }
   };
 
-  // Handle partial messages from stream events
+  // 更新指定 session 的 partial message
+  const updatePartialMessage = useCallback((sessionId: string, content: string, isVisible: boolean) => {
+    setPartialMessages(prev => {
+      const next = new Map(prev);
+      next.set(sessionId, { content, isVisible });
+      return next;
+    });
+  }, []);
+
+  // Handle partial messages from stream events - 按 session 隔离
   const handlePartialMessages = useCallback((partialEvent: ServerEvent) => {
     if (partialEvent.type !== "stream.message" || partialEvent.payload.message.type !== "stream_event") return;
 
+    const sessionId = partialEvent.payload.sessionId;
     const message = partialEvent.payload.message as any;
+    
     if (message.event.type === "content_block_start") {
-      partialMessageRef.current = "";
-      setPartialMessage(partialMessageRef.current);
-      setShowPartialMessage(true);
+      partialMessagesRef.current.set(sessionId, "");
+      updatePartialMessage(sessionId, "", true);
     }
 
     if (message.event.type === "content_block_delta") {
-      partialMessageRef.current += getPartialMessageContent(message.event) || "";
-      setPartialMessage(partialMessageRef.current);
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const currentContent = partialMessagesRef.current.get(sessionId) || "";
+      const newContent = currentContent + (getPartialMessageContent(message.event) || "");
+      partialMessagesRef.current.set(sessionId, newContent);
+      updatePartialMessage(sessionId, newContent, true);
     }
 
     if (message.event.type === "content_block_stop") {
-      setShowPartialMessage(false);
+      const finalContent = partialMessagesRef.current.get(sessionId) || "";
+      updatePartialMessage(sessionId, finalContent, false);
+      // 延迟清理
       setTimeout(() => {
-        partialMessageRef.current = "";
-        setPartialMessage(partialMessageRef.current);
+        partialMessagesRef.current.delete(sessionId);
+        setPartialMessages(prev => {
+          const next = new Map(prev);
+          next.delete(sessionId);
+          return next;
+        });
       }, 500);
     }
-  }, []);
+  }, [updatePartialMessage]);
 
   // Combined event handler
   const onEvent = useCallback((event: ServerEvent) => {
@@ -81,6 +106,14 @@ function App() {
   const messages = activeSession?.messages ?? [];
   const permissionRequests = activeSession?.permissionRequests ?? [];
   const isRunning = activeSession?.status === "running";
+  
+  // 判断是否正在加载历史消息
+  const isLoadingHistory = activeSession && !activeSession.hydrated;
+  
+  // 获取当前 session 的 partial message 状态
+  const currentPartialState = activeSessionId ? partialMessages.get(activeSessionId) : undefined;
+  const partialMessage = currentPartialState?.content ?? "";
+  const showPartialMessage = currentPartialState?.isVisible ?? false;
 
   useEffect(() => {
     if (connected) sendEvent({ type: "session.list" });
@@ -95,8 +128,21 @@ function App() {
     }
   }, [activeSessionId, connected, sessions, historyRequested, markHistoryRequested, sendEvent]);
 
+  // 节流滚动，避免流式输出时频繁触发
+  const scrollTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollTimeoutRef.current) {
+      window.clearTimeout(scrollTimeoutRef.current);
+    }
+    scrollTimeoutRef.current = window.setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50); // 50ms 节流
+    
+    return () => {
+      if (scrollTimeoutRef.current) {
+        window.clearTimeout(scrollTimeoutRef.current);
+      }
+    };
   }, [messages, partialMessage]);
 
   const handleNewSession = useCallback(() => {
@@ -132,22 +178,29 @@ function App() {
 
         <div className="flex-1 overflow-y-auto px-8 pb-40 pt-6">
           <div className="mx-auto max-w-3xl">
-            {messages.length === 0 ? (
+            {isLoadingHistory ? (
+              // 骨架屏 - 加载历史消息时显示
+              <MessageSkeleton />
+            ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="text-lg font-medium text-ink-700">No messages yet</div>
                 <p className="mt-2 text-sm text-muted">Start a conversation with Claude Code</p>
               </div>
             ) : (
-              messages.map((msg, idx) => (
-                <MessageCard
-                  key={idx}
-                  message={msg}
-                  isLast={idx === messages.length - 1}
-                  isRunning={isRunning}
-                  permissionRequest={permissionRequests[0]}
-                  onPermissionResult={handlePermissionResult}
-                />
-              ))
+              messages.map((msg, idx) => {
+                // 使用消息的唯一标识作为 key，避免不必要的重新渲染
+                const msgKey = ('uuid' in msg && msg.uuid) ? String(msg.uuid) : `msg-${idx}`;
+                return (
+                  <MessageCard
+                    key={msgKey}
+                    message={msg}
+                    isLast={idx === messages.length - 1}
+                    isRunning={isRunning}
+                    permissionRequest={permissionRequests[0]}
+                    onPermissionResult={handlePermissionResult}
+                  />
+                );
+              })
             )}
 
             {/* Partial message display with skeleton loading */}

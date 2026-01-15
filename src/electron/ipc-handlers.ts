@@ -51,12 +51,23 @@ export function handleClientEvent(event: ClientEvent) {
       });
       return;
     }
+    
+    // Get pending permissions from the session
+    const session = sessions.getSession(event.payload.sessionId);
+    const pendingPermissions = session ? 
+      Array.from(session.pendingPermissions.values()).map(p => ({
+        toolUseId: p.toolUseId,
+        toolName: p.toolName,
+        input: p.input
+      })) : [];
+    
     emit({
       type: "session.history",
       payload: {
         sessionId: history.session.id,
         status: history.session.status,
-        messages: history.messages
+        messages: history.messages,
+        pendingPermissions
       }
     });
     return;
