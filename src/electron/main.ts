@@ -241,9 +241,50 @@ app.on("ready", () => {
                         if (existsSync(skillFilePath)) {
                             try {
                                 const content = readFileSync(skillFilePath, "utf8");
-                                // Extract first paragraph as description
-                                const lines = content.split("\n").filter(l => l.trim() && !l.startsWith("#"));
-                                description = lines[0]?.substring(0, 200);
+                                // Extract description from SKILL.md
+                                // Look for content between first heading and next heading/section
+                                const lines = content.split("\n");
+                                const descriptionLines: string[] = [];
+                                let foundFirstHeading = false;
+                                let collectingDescription = false;
+                                
+                                for (const line of lines) {
+                                    const trimmed = line.trim();
+                                    
+                                    // Skip empty lines at the beginning
+                                    if (!foundFirstHeading && !trimmed) continue;
+                                    
+                                    // Found a heading
+                                    if (trimmed.startsWith("#")) {
+                                        if (!foundFirstHeading) {
+                                            foundFirstHeading = true;
+                                            collectingDescription = true;
+                                            continue;
+                                        } else {
+                                            // Found next heading, stop collecting
+                                            break;
+                                        }
+                                    }
+                                    
+                                    // Collect description lines
+                                    if (collectingDescription && trimmed) {
+                                        // Skip code blocks
+                                        if (trimmed.startsWith("```")) continue;
+                                        // Skip list items that look like commands
+                                        if (trimmed.startsWith("- `") || trimmed.startsWith("* `")) continue;
+                                        
+                                        descriptionLines.push(trimmed);
+                                        
+                                        // Limit to 3 lines or 300 chars
+                                        if (descriptionLines.length >= 3 || descriptionLines.join(" ").length > 300) {
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (descriptionLines.length > 0) {
+                                    description = descriptionLines.join(" ").substring(0, 300);
+                                }
                             } catch {
                                 // Ignore read errors
                             }
@@ -335,6 +376,19 @@ app.on("ready", () => {
         } catch (error) {
             console.error("Failed to delete MCP server:", error);
             return { success: false, message: `删除失败: ${error instanceof Error ? error.message : String(error)}` };
+        }
+    });
+
+    // Read skill content
+    ipcMainHandle("read-skill-content", (_: any, skillPath: string) => {
+        try {
+            if (existsSync(skillPath)) {
+                return readFileSync(skillPath, "utf8");
+            }
+            return null;
+        } catch (error) {
+            console.error("Failed to read skill content:", error);
+            return null;
         }
     });
 })

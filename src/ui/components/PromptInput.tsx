@@ -7,21 +7,100 @@ const MAX_ROWS = 12;
 const LINE_HEIGHT = 21;
 const MAX_HEIGHT = MAX_ROWS * LINE_HEIGHT;
 
-// Slash commands definition
-const SLASH_COMMANDS = [
-  { command: "/init", description: "初始化 CLAUDE.md 项目配置", category: "项目" },
-  { command: "/clear", description: "清除当前会话的上下文", category: "会话" },
-  { command: "/compact", description: "压缩对话历史以节省 token", category: "会话" },
-  { command: "/memory", description: "查看和管理记忆内容", category: "设置" },
-  { command: "/model", description: "查看或切换当前模型", category: "设置" },
-  { command: "/permissions", description: "查看当前工具权限设置", category: "设置" },
-  { command: "/mcp", description: "查看 MCP 服务器状态", category: "MCP" },
-  { command: "/cost", description: "显示当前会话的 token 消耗", category: "信息" },
-  { command: "/help", description: "显示所有可用命令", category: "信息" },
-  { command: "/doctor", description: "检查环境配置问题", category: "诊断" },
-  { command: "/review", description: "让 Agent 回顾最近的更改", category: "代码" },
-  { command: "/bug", description: "报告问题给 Agent 分析", category: "代码" },
-];
+// Skill category config
+const SKILL_CATEGORY_CONFIG: Record<string, { icon: string; color: string }> = {
+  "development": { icon: "code", color: "text-blue-500 bg-blue-500/10" },
+  "writing": { icon: "pen", color: "text-purple-500 bg-purple-500/10" },
+  "analysis": { icon: "chart", color: "text-green-500 bg-green-500/10" },
+  "design": { icon: "palette", color: "text-pink-500 bg-pink-500/10" },
+  "productivity": { icon: "zap", color: "text-yellow-500 bg-yellow-500/10" },
+  "research": { icon: "search", color: "text-cyan-500 bg-cyan-500/10" },
+  "other": { icon: "box", color: "text-gray-500 bg-gray-500/10" },
+};
+
+// Get category from skill name/description
+function getSkillCategory(skill: SkillInfo): string {
+  const name = skill.name.toLowerCase();
+  const desc = (skill.description || "").toLowerCase();
+  const text = name + " " + desc;
+  
+  if (text.includes("code") || text.includes("dev") || text.includes("程序") || text.includes("开发") || text.includes("debug")) {
+    return "development";
+  }
+  if (text.includes("write") || text.includes("写作") || text.includes("文档") || text.includes("blog") || text.includes("article")) {
+    return "writing";
+  }
+  if (text.includes("data") || text.includes("分析") || text.includes("chart") || text.includes("数据") || text.includes("report")) {
+    return "analysis";
+  }
+  if (text.includes("design") || text.includes("设计") || text.includes("ui") || text.includes("ux") || text.includes("创意")) {
+    return "design";
+  }
+  if (text.includes("效率") || text.includes("productivity") || text.includes("automat") || text.includes("自动")) {
+    return "productivity";
+  }
+  if (text.includes("research") || text.includes("调研") || text.includes("搜索") || text.includes("search")) {
+    return "research";
+  }
+  return "other";
+}
+
+// Skill icon component
+function SkillIcon({ type, className = "" }: { type: string; className?: string }) {
+  switch (type) {
+    case "code":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="16 18 22 12 16 6" />
+          <polyline points="8 6 2 12 8 18" />
+        </svg>
+      );
+    case "pen":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 19l7-7 3 3-7 7-3-3z" />
+          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+        </svg>
+      );
+    case "chart":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      );
+    case "palette":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="13.5" cy="6.5" r="1.5" />
+          <circle cx="17.5" cy="10.5" r="1.5" />
+          <circle cx="8.5" cy="7.5" r="1.5" />
+          <circle cx="6.5" cy="12.5" r="1.5" />
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z" />
+        </svg>
+      );
+    case "zap":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+      );
+    case "search":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        </svg>
+      );
+  }
+}
 
 interface PromptInputProps {
   sendEvent: (event: ClientEvent) => void;
@@ -180,69 +259,107 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
   } = usePromptActions(sendEvent);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   
-  // Slash command state
-  const [showCommands, setShowCommands] = useState(false);
+  // Skills state
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [showSkills, setShowSkills] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [commandFilter, setCommandFilter] = useState("");
-  const commandListRef = useRef<HTMLDivElement | null>(null);
+  const [skillFilter, setSkillFilter] = useState("");
+  const skillListRef = useRef<HTMLDivElement | null>(null);
 
-  // Filter commands based on input
-  const filteredCommands = SLASH_COMMANDS.filter(cmd => 
-    cmd.command.toLowerCase().includes(commandFilter.toLowerCase()) ||
-    cmd.description.toLowerCase().includes(commandFilter.toLowerCase())
-  );
+  // Load skills on mount
+  useEffect(() => {
+    window.electron.getClaudeConfig().then((config) => {
+      setSkills(config.skills);
+    }).catch(console.error);
+  }, []);
 
-  // Check if we should show slash commands
+  // Filter skills based on input
+  const filteredSkills = skills.filter(skill => {
+    const filter = skillFilter.toLowerCase().replace(/^\//, "");
+    return skill.name.toLowerCase().includes(filter) ||
+      (skill.description || "").toLowerCase().includes(filter);
+  });
+
+  // Check if we should show skills selector
   useEffect(() => {
     const trimmed = prompt.trimStart();
     if (trimmed.startsWith("/")) {
-      const commandPart = trimmed.split(" ")[0];
-      setCommandFilter(commandPart);
-      setShowCommands(true);
+      const filterPart = trimmed.split(" ")[0];
+      setSkillFilter(filterPart);
+      setShowSkills(true);
       setSelectedIndex(0);
     } else {
-      setShowCommands(false);
-      setCommandFilter("");
+      setShowSkills(false);
+      setSkillFilter("");
     }
   }, [prompt]);
 
   // Scroll selected item into view
   useEffect(() => {
-    if (showCommands && commandListRef.current) {
-      const selectedElement = commandListRef.current.children[selectedIndex] as HTMLElement;
+    if (showSkills && skillListRef.current) {
+      const selectedElement = skillListRef.current.children[selectedIndex] as HTMLElement;
       if (selectedElement) {
         selectedElement.scrollIntoView({ block: "nearest" });
       }
     }
-  }, [selectedIndex, showCommands]);
+  }, [selectedIndex, showSkills]);
 
-  const handleSelectCommand = useCallback((command: string) => {
-    setPrompt(command + " ");
-    setShowCommands(false);
+  const handleSelectSkill = useCallback(async (skill: SkillInfo) => {
+    setShowSkills(false);
+    
+    // Read full skill content
+    try {
+      const content = await window.electron.readSkillContent(skill.fullPath);
+      if (content) {
+        // Get current session ID
+        const state = useAppStore.getState();
+        const sessionId = state.activeSessionId;
+        
+        if (sessionId) {
+          // Add skill_loaded message to the session
+          state.addLocalMessage(sessionId, {
+            type: "skill_loaded",
+            skillName: skill.name,
+            skillContent: content,
+            skillDescription: skill.description
+          });
+        }
+        
+        // Also set prompt with skill reference for future messages
+        setPrompt(`@${skill.name} `);
+      } else {
+        // Fallback if content couldn't be loaded
+        setPrompt(`@${skill.name} `);
+      }
+    } catch (error) {
+      console.error("Failed to load skill content:", error);
+      setPrompt(`@${skill.name} `);
+    }
+    
     promptRef.current?.focus();
   }, [setPrompt]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Handle slash command navigation
-    if (showCommands && filteredCommands.length > 0) {
+    // Handle skill selection navigation
+    if (showSkills && filteredSkills.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex(prev => (prev + 1) % filteredCommands.length);
+        setSelectedIndex(prev => (prev + 1) % filteredSkills.length);
         return;
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+        setSelectedIndex(prev => (prev - 1 + filteredSkills.length) % filteredSkills.length);
         return;
       }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
         e.preventDefault();
-        handleSelectCommand(filteredCommands[selectedIndex].command);
+        handleSelectSkill(filteredSkills[selectedIndex]);
         return;
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        setShowCommands(false);
+        setShowSkills(false);
         return;
       }
     }
@@ -285,43 +402,77 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
   return (
     <section className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-surface via-surface to-transparent pb-6 px-2 lg:pb-8 pt-8 lg:ml-[280px]">
       <div className="mx-auto w-full max-w-full lg:max-w-3xl relative">
-        {/* Slash Commands Dropdown */}
-        {showCommands && filteredCommands.length > 0 && (
+        {/* Skills Selector Dropdown */}
+        {showSkills && (
           <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-ink-900/10 bg-surface shadow-elevated overflow-hidden z-50">
-            <div 
-              ref={commandListRef}
-              className="max-h-64 overflow-y-auto py-1"
-            >
-              {filteredCommands.map((cmd, index) => (
-                <button
-                  key={cmd.command}
-                  className={`w-full px-4 py-2.5 text-left flex items-center gap-3 transition-colors ${
-                    index === selectedIndex 
-                      ? "bg-accent/10 text-accent" 
-                      : "hover:bg-surface-secondary text-ink-800"
-                  }`}
-                  onClick={() => handleSelectCommand(cmd.command)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                >
-                  <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                    index === selectedIndex ? "bg-accent/20" : "bg-surface-tertiary"
-                  }`}>
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M7 15l5-5 5 5" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-medium">{cmd.command}</span>
-                      <span className="text-xs text-muted px-1.5 py-0.5 bg-surface-tertiary rounded">
-                        {cmd.category}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted mt-0.5 truncate">{cmd.description}</div>
-                  </div>
-                </button>
-              ))}
+            {/* Header */}
+            <div className="px-4 py-2.5 border-b border-ink-900/5 bg-surface-secondary/50">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-accent" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span className="text-sm font-medium text-ink-800">选择技能</span>
+                <span className="text-xs text-muted">输入 / 搜索技能</span>
+              </div>
             </div>
+            
+            {filteredSkills.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <svg viewBox="0 0 24 24" className="h-10 w-10 mx-auto text-muted-light" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <p className="mt-2 text-sm text-muted">
+                  {skills.length === 0 ? "暂无可用技能" : "没有找到匹配的技能"}
+                </p>
+                <p className="mt-1 text-xs text-muted-light">
+                  在 ~/.claude/skills/ 目录下添加技能
+                </p>
+              </div>
+            ) : (
+              <div 
+                ref={skillListRef}
+                className="max-h-72 overflow-y-auto py-1"
+              >
+                {filteredSkills.map((skill, index) => {
+                  const category = getSkillCategory(skill);
+                  const config = SKILL_CATEGORY_CONFIG[category] || SKILL_CATEGORY_CONFIG.other;
+                  return (
+                    <button
+                      key={skill.name}
+                      className={`w-full px-4 py-3 text-left flex items-start gap-3 transition-colors ${
+                        index === selectedIndex 
+                          ? "bg-accent/10" 
+                          : "hover:bg-surface-secondary"
+                      }`}
+                      onClick={() => handleSelectSkill(skill)}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                    >
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl flex-shrink-0 ${config.color}`}>
+                        <SkillIcon type={config.icon} className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${index === selectedIndex ? "text-accent" : "text-ink-800"}`}>
+                            {skill.name}
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] text-success">
+                            <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="currentColor">
+                              <circle cx="12" cy="12" r="4" />
+                            </svg>
+                            已安装
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted mt-1 line-clamp-2">
+                          {skill.description || "暂无描述"}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            
+            {/* Footer */}
             <div className="border-t border-ink-900/5 px-4 py-2 bg-surface-secondary/50">
               <div className="flex items-center gap-4 text-xs text-muted">
                 <span className="flex items-center gap-1">

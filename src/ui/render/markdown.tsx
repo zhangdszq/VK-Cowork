@@ -39,7 +39,33 @@ export default memo(function MDContent({ text }: { text: string }) {
               {children}
             </code>
           );
-        }
+        },
+        table: (props) => (
+          <div className="mt-3 overflow-x-auto rounded-xl border border-ink-900/10">
+            <table className="w-full text-sm" {...props} />
+          </div>
+        ),
+        thead: (props) => (
+          <thead className="bg-surface-tertiary border-b border-ink-900/10" {...props} />
+        ),
+        tbody: (props) => (
+          <tbody className="divide-y divide-ink-900/5" {...props} />
+        ),
+        tr: (props) => (
+          <tr className="hover:bg-surface-secondary/50 transition-colors" {...props} />
+        ),
+        th: (props) => (
+          <th className="px-4 py-2.5 text-left font-medium text-ink-800 whitespace-nowrap" {...props} />
+        ),
+        td: (props) => (
+          <td className="px-4 py-2.5 text-ink-700" {...props} />
+        ),
+        blockquote: (props) => (
+          <blockquote className="mt-3 border-l-4 border-accent/30 bg-accent/5 pl-4 py-2 pr-3 rounded-r-lg text-ink-700 italic" {...props} />
+        ),
+        hr: () => (
+          <hr className="my-4 border-t border-ink-900/10" />
+        ),
       }}
     >
       {String(text ?? "")}

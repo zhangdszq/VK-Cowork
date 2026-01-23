@@ -6,10 +6,11 @@ import type {
   SDKResultMessage,
   SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk";
-import type { StreamMessage } from "../types";
+import type { StreamMessage, SkillLoadedMessage } from "../types";
 import type { PermissionRequest } from "../store/useAppStore";
 import MDContent from "../render/markdown";
 import { DecisionPanel } from "./DecisionPanel";
+import { SkillLoadedCard } from "./SkillLoadedCard";
 
 type MessageContent = SDKAssistantMessage["message"]["content"][number];
 type ToolResultContent = SDKUserMessage["message"]["content"][number];
@@ -301,6 +302,10 @@ export const MessageCard = memo(function MessageCard({
 
   if (message.type === "user_prompt") {
     return <UserMessageCard message={message} showIndicator={showIndicator} />;
+  }
+
+  if (message.type === "skill_loaded") {
+    return <SkillLoadedCard message={message as SkillLoadedMessage} />;
   }
 
   const sdkMessage = message as SDKMessage;

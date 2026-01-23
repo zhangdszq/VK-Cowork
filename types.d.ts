@@ -90,6 +90,7 @@ type EventPayloadMapping = {
     "get-claude-config": ClaudeConfigInfo;
     "save-mcp-server": SaveMcpResult;
     "delete-mcp-server": SaveMcpResult;
+    "read-skill-content": string | null;
 }
 
 interface Window {
@@ -121,5 +122,6 @@ interface Window {
         getClaudeConfig: () => Promise<ClaudeConfigInfo>;
         saveMcpServer: (server: McpServer) => Promise<SaveMcpResult>;
         deleteMcpServer: (name: string) => Promise<SaveMcpResult>;
+        readSkillContent: (skillPath: string) => Promise<string | null>;
     }
 }

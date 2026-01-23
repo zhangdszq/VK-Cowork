@@ -40,6 +40,7 @@ interface AppState {
   markHistoryRequested: (sessionId: string) => void;
   resolvePermissionRequest: (sessionId: string, toolUseId: string) => void;
   handleServerEvent: (event: ServerEvent) => void;
+  addLocalMessage: (sessionId: string, message: StreamMessage) => void;
 }
 
 function createSession(id: string): SessionView {
@@ -265,5 +266,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         break;
       }
     }
+  },
+
+  addLocalMessage: (sessionId, message) => {
+    set((state) => {
+      const existing = state.sessions[sessionId];
+      if (!existing) return {};
+      return {
+        sessions: {
+          ...state.sessions,
+          [sessionId]: { ...existing, messages: [...existing.messages, message] }
+        }
+      };
+    });
   }
 }));

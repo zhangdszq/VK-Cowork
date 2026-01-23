@@ -66,7 +66,9 @@ electron.contextBridge.exposeInMainWorld("electron", {
     saveMcpServer: (server: any) => 
         ipcInvoke("save-mcp-server", server),
     deleteMcpServer: (name: string) => 
-        ipcInvoke("delete-mcp-server", name)
+        ipcInvoke("delete-mcp-server", name),
+    readSkillContent: (skillPath: string) => 
+        ipcInvoke("read-skill-content", skillPath)
 } satisfies Window['electron'])
 
 function ipcInvoke<Key extends keyof EventPayloadMapping>(key: Key, ...args: any[]): Promise<EventPayloadMapping[Key]> {
