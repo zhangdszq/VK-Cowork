@@ -1,8 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAppStore } from "../store/useAppStore";
 import { SettingsModal } from "./SettingsModal";
+
+// Environment status type
+type EnvStatus = "checking" | "ok" | "warning" | "error";
+type EnvCheckResult = {
+  claudeCli: { installed: boolean; message: string };
+  overall: EnvStatus;
+};
 
 interface SidebarProps {
   connected: boolean;
@@ -21,6 +28,62 @@ export function Sidebar({
   const [copied, setCopied] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  
+  // Environment check state
+  const [envStatus, setEnvStatus] = useState<EnvCheckResult | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installMessage, setInstallMessage] = useState<string>("");
+
+  // Check environment on mount
+  useEffect(() => {
+    checkEnv();
+  }, []);
+
+  // Listen for install progress
+  useEffect(() => {
+    const unsubscribe = window.electron.onInstallProgress((message) => {
+      setInstallMessage(message);
+    });
+    return unsubscribe;
+  }, []);
+
+  const checkEnv = useCallback(async () => {
+    try {
+      const result = await window.electron.checkEnvironment();
+      const cliCheck = result.checks.find(c => c.id === "claude-cli");
+      setEnvStatus({
+        claudeCli: {
+          installed: cliCheck?.status === "ok",
+          message: cliCheck?.message || ""
+        },
+        overall: result.allPassed ? "ok" : result.checks.some(c => c.status === "error") ? "error" : "warning"
+      });
+    } catch (error) {
+      console.error("Environment check failed:", error);
+    }
+  }, []);
+
+  const handleInstallCli = useCallback(async () => {
+    setInstalling(true);
+    setInstallMessage("正在安装...");
+    try {
+      const result = await window.electron.installClaudeCLI();
+      if (result.success) {
+        setInstallMessage("安装成功！");
+        // Re-check environment
+        setTimeout(() => {
+          checkEnv();
+          setInstallMessage("");
+        }, 1500);
+      } else {
+        setInstallMessage(`安装失败: ${result.message}`);
+      }
+    } catch (error) {
+      setInstallMessage(`安装出错: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setInstalling(false);
+    }
+  }, [checkEnv]);
 
   const formatCwd = (cwd?: string) => {
     if (!cwd) return "Working dir unavailable";
@@ -170,6 +233,43 @@ export function Sidebar({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Environment Warning */}
+      {envStatus && !envStatus.claudeCli.installed && (
+        <div className="rounded-xl border border-warning/30 bg-warning/5 p-3">
+          <div className="flex items-start gap-2">
+            <svg className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium text-warning">Claude CLI 未安装</div>
+              <div className="text-[11px] text-muted mt-0.5">需要安装 Claude CLI 才能使用本应用</div>
+              {installMessage && (
+                <div className="text-[11px] text-info mt-1 font-mono">{installMessage}</div>
+              )}
+              <button
+                onClick={handleInstallCli}
+                disabled={installing}
+                className="mt-2 w-full rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {installing ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    安装中...
+                  </span>
+                ) : (
+                  "一键安装 Claude CLI"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Settings Button */}
       <div className="mt-auto pt-4 border-t border-ink-900/5">

@@ -8,6 +8,7 @@ import { StartSessionModal } from "./components/StartSessionModal";
 import { PromptInput, usePromptActions } from "./components/PromptInput";
 import { MessageCard } from "./components/EventCard";
 import { MessageSkeleton } from "./components/MessageSkeleton";
+import { McpSkillModal } from "./components/McpSkillModal";
 import MDContent from "./render/markdown";
 
 // 按 session 存储的 partialMessage 状态
@@ -154,6 +155,20 @@ function App() {
     sendEvent({ type: "session.delete", payload: { sessionId } });
   }, [sendEvent]);
 
+  // MCP/Skill modal state
+  const [mcpSkillModalOpen, setMcpSkillModalOpen] = useState(false);
+  const [mcpSkillInitialTab, setMcpSkillInitialTab] = useState<"mcp" | "skill">("mcp");
+
+  const handleOpenMcp = useCallback(() => {
+    setMcpSkillInitialTab("mcp");
+    setMcpSkillModalOpen(true);
+  }, []);
+
+  const handleOpenSkill = useCallback(() => {
+    setMcpSkillInitialTab("skill");
+    setMcpSkillModalOpen(true);
+  }, []);
+
   const handlePermissionResult = useCallback((toolUseId: string, result: PermissionResult) => {
     if (!activeSessionId) return;
     sendEvent({ type: "permission.response", payload: { sessionId: activeSessionId, toolUseId, result } });
@@ -170,10 +185,34 @@ function App() {
 
       <main className="flex flex-1 flex-col ml-[280px] bg-surface-cream">
         <div 
-          className="flex items-center justify-center h-12 border-b border-ink-900/10 bg-surface-cream select-none"
+          className="flex items-center justify-between h-12 border-b border-ink-900/10 bg-surface-cream select-none px-4"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
+          <div className="w-24" /> {/* Spacer for balance */}
           <span className="text-sm font-medium text-ink-700">{activeSession?.title || "Agent Cowork"}</span>
+          <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <button
+              onClick={handleOpenMcp}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-surface-tertiary hover:text-ink-700 transition-colors"
+              title="MCP 服务器"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 1v6m0 6v10M1 12h6m6 0h10" />
+              </svg>
+              MCP
+            </button>
+            <button
+              onClick={handleOpenSkill}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-surface-tertiary hover:text-ink-700 transition-colors"
+              title="Skills"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+              SKILL
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-8 pb-40 pt-6">
@@ -256,6 +295,12 @@ function App() {
           </div>
         </div>
       )}
+
+      <McpSkillModal
+        open={mcpSkillModalOpen}
+        onOpenChange={setMcpSkillModalOpen}
+        initialTab={mcpSkillInitialTab}
+      />
     </div>
   );
 }

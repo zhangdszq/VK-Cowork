@@ -1,5 +1,5 @@
 {
-    "appId": "com.devagentforge.agentcowork",
+    "appId": "com.vipkid.agentcowork",
     "productName": "Agent Cowork",
     "files": [
         "dist-electron",
@@ -18,7 +18,7 @@
         "entitlementsInherit": "build/entitlements.mac.plist",
         "hardenedRuntime": true,
         "gatekeeperAssess": false,
-        "notarize": true
+        "notarize": false
     },
     "linux": {
         "target": "AppImage",

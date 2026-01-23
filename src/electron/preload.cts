@@ -59,7 +59,14 @@ electron.contextBridge.exposeInMainWorld("electron", {
     installNodeJs: () => 
         ipcInvoke("install-nodejs"),
     installSdk: () => 
-        ipcInvoke("install-sdk")
+        ipcInvoke("install-sdk"),
+    // Claude config (MCP & Skills)
+    getClaudeConfig: () => 
+        ipcInvoke("get-claude-config"),
+    saveMcpServer: (server: any) => 
+        ipcInvoke("save-mcp-server", server),
+    deleteMcpServer: (name: string) => 
+        ipcInvoke("delete-mcp-server", name)
 } satisfies Window['electron'])
 
 function ipcInvoke<Key extends keyof EventPayloadMapping>(key: Key, ...args: any[]): Promise<EventPayloadMapping[Key]> {

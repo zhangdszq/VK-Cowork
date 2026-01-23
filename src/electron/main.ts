@@ -9,6 +9,9 @@ import "./libs/claude-settings.js";
 import { loadUserSettings, saveUserSettings, type UserSettings } from "./libs/user-settings.js";
 import { reloadClaudeSettings } from "./libs/claude-settings.js";
 import { runEnvironmentChecks, validateApiConfig, installClaudeCLI, isClaudeCLIInstalled, installNodeJs, installSdk } from "./libs/env-check.js";
+import { readFileSync, readdirSync, existsSync, statSync, writeFileSync, mkdirSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
 app.on("ready", () => {
     const mainWindow = new BrowserWindow({
@@ -193,6 +196,145 @@ app.on("ready", () => {
         } catch (error) {
             console.error("Failed to save pasted image:", error);
             return null;
+        }
+    });
+
+    // Get Claude config (MCP servers and Skills)
+    ipcMainHandle("get-claude-config", () => {
+        const claudeDir = join(homedir(), ".claude");
+        const result: ClaudeConfigInfo = {
+            mcpServers: [],
+            skills: []
+        };
+
+        // Read MCP servers from settings.json
+        try {
+            const settingsPath = join(claudeDir, "settings.json");
+            if (existsSync(settingsPath)) {
+                const raw = readFileSync(settingsPath, "utf8");
+                const parsed = JSON.parse(raw) as { mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> };
+                if (parsed.mcpServers) {
+                    for (const [name, config] of Object.entries(parsed.mcpServers)) {
+                        result.mcpServers.push({
+                            name,
+                            command: config.command,
+                            args: config.args,
+                            env: config.env
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Failed to read MCP servers:", error);
+        }
+
+        // Read Skills from ~/.claude/skills directory
+        try {
+            const skillsDir = join(claudeDir, "skills");
+            if (existsSync(skillsDir) && statSync(skillsDir).isDirectory()) {
+                const skillDirs = readdirSync(skillsDir);
+                for (const skillName of skillDirs) {
+                    const skillPath = join(skillsDir, skillName);
+                    if (statSync(skillPath).isDirectory()) {
+                        const skillFilePath = join(skillPath, "SKILL.md");
+                        let description: string | undefined;
+                        if (existsSync(skillFilePath)) {
+                            try {
+                                const content = readFileSync(skillFilePath, "utf8");
+                                // Extract first paragraph as description
+                                const lines = content.split("\n").filter(l => l.trim() && !l.startsWith("#"));
+                                description = lines[0]?.substring(0, 200);
+                            } catch {
+                                // Ignore read errors
+                            }
+                        }
+                        result.skills.push({
+                            name: skillName,
+                            fullPath: skillFilePath,
+                            description
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Failed to read Skills:", error);
+        }
+
+        return result;
+    });
+
+    // Save MCP server to settings.json
+    ipcMainHandle("save-mcp-server", (_: any, server: McpServer) => {
+        const claudeDir = join(homedir(), ".claude");
+        const settingsPath = join(claudeDir, "settings.json");
+        
+        try {
+            // Ensure .claude directory exists
+            if (!existsSync(claudeDir)) {
+                mkdirSync(claudeDir, { recursive: true });
+            }
+
+            // Read existing settings or create new
+            let settings: Record<string, unknown> = {};
+            if (existsSync(settingsPath)) {
+                const raw = readFileSync(settingsPath, "utf8");
+                settings = JSON.parse(raw);
+            }
+
+            // Initialize mcpServers if not exists
+            if (!settings.mcpServers || typeof settings.mcpServers !== "object") {
+                settings.mcpServers = {};
+            }
+
+            // Add or update the server
+            const mcpServers = settings.mcpServers as Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
+            mcpServers[server.name] = {
+                command: server.command,
+                ...(server.args && server.args.length > 0 ? { args: server.args } : {}),
+                ...(server.env && Object.keys(server.env).length > 0 ? { env: server.env } : {})
+            };
+
+            // Write back
+            writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+            
+            return { success: true, message: `MCP 服务器 "${server.name}" 已保存` };
+        } catch (error) {
+            console.error("Failed to save MCP server:", error);
+            return { success: false, message: `保存失败: ${error instanceof Error ? error.message : String(error)}` };
+        }
+    });
+
+    // Delete MCP server from settings.json
+    ipcMainHandle("delete-mcp-server", (_: any, name: string) => {
+        const claudeDir = join(homedir(), ".claude");
+        const settingsPath = join(claudeDir, "settings.json");
+        
+        try {
+            if (!existsSync(settingsPath)) {
+                return { success: false, message: "配置文件不存在" };
+            }
+
+            const raw = readFileSync(settingsPath, "utf8");
+            const settings = JSON.parse(raw) as Record<string, unknown>;
+
+            if (!settings.mcpServers || typeof settings.mcpServers !== "object") {
+                return { success: false, message: "没有 MCP 服务器配置" };
+            }
+
+            const mcpServers = settings.mcpServers as Record<string, unknown>;
+            if (!(name in mcpServers)) {
+                return { success: false, message: `MCP 服务器 "${name}" 不存在` };
+            }
+
+            delete mcpServers[name];
+
+            // Write back
+            writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+            
+            return { success: true, message: `MCP 服务器 "${name}" 已删除` };
+        } catch (error) {
+            console.error("Failed to delete MCP server:", error);
+            return { success: false, message: `删除失败: ${error instanceof Error ? error.message : String(error)}` };
         }
     });
 })

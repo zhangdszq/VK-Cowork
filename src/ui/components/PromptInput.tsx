@@ -7,6 +7,22 @@ const MAX_ROWS = 12;
 const LINE_HEIGHT = 21;
 const MAX_HEIGHT = MAX_ROWS * LINE_HEIGHT;
 
+// Slash commands definition
+const SLASH_COMMANDS = [
+  { command: "/init", description: "初始化 CLAUDE.md 项目配置", category: "项目" },
+  { command: "/clear", description: "清除当前会话的上下文", category: "会话" },
+  { command: "/compact", description: "压缩对话历史以节省 token", category: "会话" },
+  { command: "/memory", description: "查看和管理记忆内容", category: "设置" },
+  { command: "/model", description: "查看或切换当前模型", category: "设置" },
+  { command: "/permissions", description: "查看当前工具权限设置", category: "设置" },
+  { command: "/mcp", description: "查看 MCP 服务器状态", category: "MCP" },
+  { command: "/cost", description: "显示当前会话的 token 消耗", category: "信息" },
+  { command: "/help", description: "显示所有可用命令", category: "信息" },
+  { command: "/doctor", description: "检查环境配置问题", category: "诊断" },
+  { command: "/review", description: "让 Agent 回顾最近的更改", category: "代码" },
+  { command: "/bug", description: "报告问题给 Agent 分析", category: "代码" },
+];
+
 interface PromptInputProps {
   sendEvent: (event: ClientEvent) => void;
 }
@@ -163,8 +179,74 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
     handlePaste
   } = usePromptActions(sendEvent);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  
+  // Slash command state
+  const [showCommands, setShowCommands] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [commandFilter, setCommandFilter] = useState("");
+  const commandListRef = useRef<HTMLDivElement | null>(null);
+
+  // Filter commands based on input
+  const filteredCommands = SLASH_COMMANDS.filter(cmd => 
+    cmd.command.toLowerCase().includes(commandFilter.toLowerCase()) ||
+    cmd.description.toLowerCase().includes(commandFilter.toLowerCase())
+  );
+
+  // Check if we should show slash commands
+  useEffect(() => {
+    const trimmed = prompt.trimStart();
+    if (trimmed.startsWith("/")) {
+      const commandPart = trimmed.split(" ")[0];
+      setCommandFilter(commandPart);
+      setShowCommands(true);
+      setSelectedIndex(0);
+    } else {
+      setShowCommands(false);
+      setCommandFilter("");
+    }
+  }, [prompt]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    if (showCommands && commandListRef.current) {
+      const selectedElement = commandListRef.current.children[selectedIndex] as HTMLElement;
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [selectedIndex, showCommands]);
+
+  const handleSelectCommand = useCallback((command: string) => {
+    setPrompt(command + " ");
+    setShowCommands(false);
+    promptRef.current?.focus();
+  }, [setPrompt]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle slash command navigation
+    if (showCommands && filteredCommands.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev + 1) % filteredCommands.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        handleSelectCommand(filteredCommands[selectedIndex].command);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowCommands(false);
+        return;
+      }
+    }
+
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
     if (isRunning) { handleStop(); return; }
@@ -202,7 +284,63 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
 
   return (
     <section className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-surface via-surface to-transparent pb-6 px-2 lg:pb-8 pt-8 lg:ml-[280px]">
-      <div className="mx-auto w-full max-w-full lg:max-w-3xl">
+      <div className="mx-auto w-full max-w-full lg:max-w-3xl relative">
+        {/* Slash Commands Dropdown */}
+        {showCommands && filteredCommands.length > 0 && (
+          <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-ink-900/10 bg-surface shadow-elevated overflow-hidden z-50">
+            <div 
+              ref={commandListRef}
+              className="max-h-64 overflow-y-auto py-1"
+            >
+              {filteredCommands.map((cmd, index) => (
+                <button
+                  key={cmd.command}
+                  className={`w-full px-4 py-2.5 text-left flex items-center gap-3 transition-colors ${
+                    index === selectedIndex 
+                      ? "bg-accent/10 text-accent" 
+                      : "hover:bg-surface-secondary text-ink-800"
+                  }`}
+                  onClick={() => handleSelectCommand(cmd.command)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                >
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                    index === selectedIndex ? "bg-accent/20" : "bg-surface-tertiary"
+                  }`}>
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M7 15l5-5 5 5" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-medium">{cmd.command}</span>
+                      <span className="text-xs text-muted px-1.5 py-0.5 bg-surface-tertiary rounded">
+                        {cmd.category}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted mt-0.5 truncate">{cmd.description}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-ink-900/5 px-4 py-2 bg-surface-secondary/50">
+              <div className="flex items-center gap-4 text-xs text-muted">
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-surface rounded border border-ink-900/10 font-mono text-[10px]">↑↓</kbd>
+                  选择
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-surface rounded border border-ink-900/10 font-mono text-[10px]">Tab</kbd>
+                  确认
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-surface rounded border border-ink-900/10 font-mono text-[10px]">Esc</kbd>
+                  取消
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Image Preview */}
         {imagePath && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-ink-900/10 bg-surface-secondary px-3 py-2">

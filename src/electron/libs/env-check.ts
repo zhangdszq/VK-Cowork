@@ -25,15 +25,78 @@ export type EnvironmentCheckResult = {
 };
 
 /**
+ * Build enhanced PATH that includes common Node.js/npm installation paths
+ */
+function getEnhancedPath(): string {
+  const home = homedir();
+  const additionalPaths = [
+    // Homebrew paths
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    // npm global paths
+    `${home}/.npm-global/bin`,
+    `${home}/.npm/bin`,
+    "/usr/local/lib/node_modules/.bin",
+    // nvm paths (common versions)
+    `${home}/.nvm/versions/node/v20.0.0/bin`,
+    `${home}/.nvm/versions/node/v22.0.0/bin`,
+    `${home}/.nvm/versions/node/v18.0.0/bin`,
+    `${home}/.nvm/versions/node/v21.0.0/bin`,
+    // fnm paths
+    `${home}/.fnm/aliases/default/bin`,
+    `${home}/Library/Application Support/fnm/aliases/default/bin`,
+    // volta paths
+    `${home}/.volta/bin`,
+    // bun paths
+    `${home}/.bun/bin`,
+    // pnpm paths
+    `${home}/.local/share/pnpm`,
+    `${home}/Library/pnpm`,
+    // System paths
+    "/usr/bin",
+    "/bin",
+  ];
+  
+  const currentPath = process.env.PATH || "";
+  return [...additionalPaths, currentPath].join(":");
+}
+
+/**
  * Check if Claude CLI is available
  */
 function checkClaudeCLI(): EnvironmentCheck {
+  const enhancedPath = getEnhancedPath();
+  const home = homedir();
+  
+  // Direct path checks for common locations
+  const possibleClaudePaths = [
+    `${home}/.npm-global/bin/claude`,
+    `${home}/.npm/bin/claude`,
+    "/usr/local/bin/claude",
+    "/opt/homebrew/bin/claude",
+    `${home}/.bun/bin/claude`,
+    `${home}/.volta/bin/claude`,
+  ];
+  
+  // Check direct paths first
+  for (const claudePath of possibleClaudePaths) {
+    if (existsSync(claudePath)) {
+      return {
+        id: "claude-cli",
+        name: "Claude CLI",
+        status: "ok",
+        message: `已安装: ${claudePath}`,
+      };
+    }
+  }
+  
+  // Try with enhanced PATH
   try {
-    // Try to run 'claude --version' or 'which claude'
-    const result = execSync("which claude || where claude", {
+    const result = execSync("which claude", {
       encoding: "utf8",
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, PATH: enhancedPath },
     });
     
     if (result.trim()) {
@@ -41,33 +104,36 @@ function checkClaudeCLI(): EnvironmentCheck {
         id: "claude-cli",
         name: "Claude CLI",
         status: "ok",
-        message: `Found at: ${result.trim().split("\n")[0]}`,
+        message: `已安装: ${result.trim().split("\n")[0]}`,
       };
     }
   } catch {
-    // Try alternative check
-    try {
-      execSync("claude --version", {
-        encoding: "utf8",
-        timeout: 5000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      return {
-        id: "claude-cli",
-        name: "Claude CLI",
-        status: "ok",
-        message: "Claude CLI is available",
-      };
-    } catch {
-      // Not found
-    }
+    // Continue to alternative checks
+  }
+  
+  // Try running claude --version with enhanced PATH
+  try {
+    execSync("claude --version", {
+      encoding: "utf8",
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, PATH: enhancedPath },
+    });
+    return {
+      id: "claude-cli",
+      name: "Claude CLI",
+      status: "ok",
+      message: "Claude CLI 可用",
+    };
+  } catch {
+    // Not found
   }
 
   return {
     id: "claude-cli",
     name: "Claude CLI",
     status: "warning",
-    message: "Not found in PATH. Install with: npm install -g @anthropic-ai/claude-code",
+    message: "未检测到 Claude CLI。点击下方按钮一键安装，或在终端运行: npm install -g @anthropic-ai/claude-code",
   };
 }
 
@@ -420,11 +486,32 @@ export async function installClaudeCLI(
  * Check if Claude CLI is installed (quick check)
  */
 export function isClaudeCLIInstalled(): boolean {
+  const enhancedPath = getEnhancedPath();
+  const home = homedir();
+  
+  // Direct path checks
+  const possibleClaudePaths = [
+    `${home}/.npm-global/bin/claude`,
+    `${home}/.npm/bin/claude`,
+    "/usr/local/bin/claude",
+    "/opt/homebrew/bin/claude",
+    `${home}/.bun/bin/claude`,
+    `${home}/.volta/bin/claude`,
+  ];
+  
+  for (const claudePath of possibleClaudePaths) {
+    if (existsSync(claudePath)) {
+      return true;
+    }
+  }
+  
+  // Try with enhanced PATH
   try {
-    execSync("which claude || where claude 2>/dev/null", {
+    execSync("which claude", {
       encoding: "utf8",
       timeout: 3000,
       stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, PATH: enhancedPath },
     });
     return true;
   } catch {

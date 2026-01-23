@@ -44,6 +44,29 @@ type InstallResult = {
     output?: string;
 }
 
+type McpServer = {
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+}
+
+type SkillInfo = {
+    name: string;
+    fullPath: string;
+    description?: string;
+}
+
+type ClaudeConfigInfo = {
+    mcpServers: McpServer[];
+    skills: SkillInfo[];
+}
+
+type SaveMcpResult = {
+    success: boolean;
+    message: string;
+}
+
 type UnsubscribeFunction = () => void;
 
 type EventPayloadMapping = {
@@ -64,6 +87,9 @@ type EventPayloadMapping = {
     "save-pasted-image": string | null;
     "install-nodejs": InstallResult;
     "install-sdk": InstallResult;
+    "get-claude-config": ClaudeConfigInfo;
+    "save-mcp-server": SaveMcpResult;
+    "delete-mcp-server": SaveMcpResult;
 }
 
 interface Window {
@@ -91,5 +117,9 @@ interface Window {
         // Install tools
         installNodeJs: () => Promise<InstallResult>;
         installSdk: () => Promise<InstallResult>;
+        // Claude config (MCP & Skills)
+        getClaudeConfig: () => Promise<ClaudeConfigInfo>;
+        saveMcpServer: (server: McpServer) => Promise<SaveMcpResult>;
+        deleteMcpServer: (name: string) => Promise<SaveMcpResult>;
     }
 }
