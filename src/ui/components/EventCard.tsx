@@ -1,15 +1,12 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type {
-  PermissionResult,
   SDKAssistantMessage,
   SDKMessage,
   SDKResultMessage,
   SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk";
 import type { StreamMessage, SkillLoadedMessage } from "../types";
-import type { PermissionRequest } from "../store/useAppStore";
 import MDContent from "../render/markdown";
-import { DecisionPanel } from "./DecisionPanel";
 import { SkillLoadedCard } from "./SkillLoadedCard";
 
 type MessageContent = SDKAssistantMessage["message"]["content"][number];
@@ -26,14 +23,7 @@ type AskUserQuestionInput = {
     options?: Array<{ label: string; description?: string }>;
     multiSelect?: boolean;
   }>;
-};
-
-const getAskUserQuestionSignature = (input?: AskUserQuestionInput | null) => {
-  if (!input?.questions?.length) return "";
-  return input.questions.map((question) => {
-    const options = (question.options ?? []).map((o) => `${o.label}|${o.description ?? ""}`).join(",");
-    return `${question.question}|${question.header ?? ""}|${question.multiSelect ? "1" : "0"}|${options}`;
-  }).join("||");
+  answers?: Record<string, string>;
 };
 
 const setToolStatus = (toolUseId: string | undefined, status: ToolStatus) => {
@@ -69,25 +59,41 @@ const StatusDot = ({ variant = "accent", isActive = false, isVisible = true }: {
 };
 
 const SessionResult = ({ message }: { message: SDKResultMessage }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const formatMinutes = (ms: number | undefined) => typeof ms !== "number" ? "-" : `${(ms / 60000).toFixed(2)} min`;
   const formatUsd = (usd: number | undefined) => typeof usd !== "number" ? "-" : usd.toFixed(2);
   const formatMillions = (tokens: number | undefined) => typeof tokens !== "number" ? "-" : `${(tokens / 1_000_000).toFixed(4)} M`;
 
   return (
-    <div className="flex flex-col gap-2 mt-4">
-      <div className="header text-accent">Session Result</div>
-      <div className="flex flex-col rounded-xl px-4 py-3 border border-ink-900/10 bg-surface-secondary space-y-2">
-        <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          <span className="font-normal">Duration</span>
-          <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">{formatMinutes(message.duration_ms)}</span>
-          <span className="font-normal">API</span>
-          <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">{formatMinutes(message.duration_api_ms)}</span>
+    <div className="flex flex-col mt-4 rounded-xl border border-ink-900/10 bg-surface-secondary overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between px-4 py-2.5 text-left cursor-pointer hover:bg-surface-tertiary transition-colors"
+      >
+        <span className="header text-accent">Session Result</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-accent font-medium">${formatUsd(message.total_cost_usd)}</span>
+          <svg viewBox="0 0 24 24" className={`h-4 w-4 text-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          <span className="font-normal">Usage</span>
-          <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-0.5 text-accent text-[13px]">Cost ${formatUsd(message.total_cost_usd)}</span>
-          <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">Input {formatMillions(message.usage?.input_tokens)}</span>
-          <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">Output {formatMillions(message.usage?.output_tokens)}</span>
+      </button>
+      <div className={`grid transition-all duration-200 ease-in-out ${isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden">
+          <div className="px-4 py-3 border-t border-ink-900/5 space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-[14px]">
+              <span className="font-normal">Duration</span>
+              <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">{formatMinutes(message.duration_ms)}</span>
+              <span className="font-normal">API</span>
+              <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">{formatMinutes(message.duration_api_ms)}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[14px]">
+              <span className="font-normal">Usage</span>
+              <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-0.5 text-accent text-[13px]">Cost ${formatUsd(message.total_cost_usd)}</span>
+              <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">Input {formatMillions(message.usage?.input_tokens)}</span>
+              <span className="inline-flex items-center rounded-full bg-surface-tertiary px-2.5 py-0.5 text-ink-700 text-[13px]">Output {formatMillions(message.usage?.output_tokens)}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -105,8 +111,36 @@ function extractTagContent(input: string, tag: string): string | null {
   return match ? match[1] : null;
 }
 
+// Check if error is a macOS permission error
+const isPermissionError = (content: string): boolean => {
+  const permissionPatterns = [
+    /Operation not permitted/i,
+    /EPERM/i,
+    /Permission denied/i,
+    /access denied/i,
+  ];
+  return permissionPatterns.some(pattern => pattern.test(content));
+};
+
+// Extract path from permission error
+const extractPathFromError = (content: string): string | null => {
+  // Match patterns like "/Users/will/Downloads" or "ls: /path: Operation not permitted"
+  const patterns = [
+    /(?:ls|cat|cd|rm|cp|mv|open|read|write):\s*([\/~][^\s:]+)/i,
+    /(?:accessing|reading|writing|opening)\s+['"]?([\/~][^\s'"]+)/i,
+    /(\/Users\/[^\s:]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+};
+
 const ToolResult = ({ messageContent }: { messageContent: ToolResultContent }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [granting, setGranting] = useState(false);
+  const [accessGranted, setAccessGranted] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const isFirstRender = useRef(true);
   let lines: string[] = [];
@@ -130,15 +164,42 @@ const ToolResult = ({ messageContent }: { messageContent: ToolResultContent }) =
     } catch { lines = [JSON.stringify(messageContent, null, 2)]; }
   }
 
-  const isMarkdownContent = isMarkdown(lines.join("\n"));
+  const fullContent = lines.join("\n");
+  const hasPermissionError = isPermissionError(fullContent);
+  const errorPath = hasPermissionError ? extractPathFromError(fullContent) : null;
+  
+  const isMarkdownContent = isMarkdown(fullContent);
   const hasMoreLines = lines.length > MAX_VISIBLE_LINES;
-  const visibleContent = hasMoreLines && !isExpanded ? lines.slice(0, MAX_VISIBLE_LINES).join("\n") : lines.join("\n");
+  const visibleContent = hasMoreLines && !isExpanded ? lines.slice(0, MAX_VISIBLE_LINES).join("\n") : fullContent;
 
   useEffect(() => { setToolStatus(toolUseId, status); }, [toolUseId, status]);
   useEffect(() => {
     if (!hasMoreLines || isFirstRender.current) { isFirstRender.current = false; return; }
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [hasMoreLines, isExpanded]);
+
+  const handleGrantAccess = async () => {
+    setGranting(true);
+    try {
+      // First try to request folder access via dialog
+      const result = await window.electron.requestFolderAccess(errorPath || undefined);
+      if (result.granted) {
+        setAccessGranted(true);
+      } else {
+        // If user cancelled, open system preferences
+        await window.electron.openPrivacySettings();
+        // Assume user will grant access in system preferences
+        setAccessGranted(true);
+      }
+    } catch (error) {
+      console.error("Failed to request access:", error);
+      // Fallback to opening system preferences
+      await window.electron.openPrivacySettings();
+      setAccessGranted(true);
+    } finally {
+      setGranting(false);
+    }
+  };
 
   return (
     <div className="flex flex-col mt-4">
@@ -152,6 +213,47 @@ const ToolResult = ({ messageContent }: { messageContent: ToolResultContent }) =
             <span>{isExpanded ? "▲" : "▼"}</span>
             <span>{isExpanded ? "Collapse" : `Show ${lines.length - MAX_VISIBLE_LINES} more lines`}</span>
           </button>
+        )}
+        {/* Permission error - show grant access button or success message */}
+        {hasPermissionError && !accessGranted && (
+          <div className="mt-3 pt-3 border-t border-ink-900/10">
+            <div className="flex items-start gap-2 text-warning text-sm mb-2">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <span>macOS 需要授权访问此文件夹{errorPath ? `：${errorPath}` : ""}</span>
+            </div>
+            <button
+              onClick={handleGrantAccess}
+              disabled={granting}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+            >
+              {granting ? (
+                <span className="flex items-center gap-1.5">
+                  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  授权中...
+                </span>
+              ) : (
+                "授予文件夹访问权限"
+              )}
+            </button>
+          </div>
+        )}
+        {hasPermissionError && accessGranted && (
+          <div className="mt-3 pt-3 border-t border-ink-900/10">
+            <div className="flex items-center gap-2 text-success text-sm">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              <span>已授权，请重新执行任务</span>
+            </div>
+          </div>
         )}
         <div ref={bottomRef} />
       </div>
@@ -208,46 +310,125 @@ const ToolUseCard = ({ messageContent, showIndicator = false }: { messageContent
 
 const AskUserQuestionCard = ({
   messageContent,
-  permissionRequest,
-  onPermissionResult
+  onAnswer
 }: {
   messageContent: MessageContent;
-  permissionRequest?: PermissionRequest;
-  onPermissionResult?: (toolUseId: string, result: PermissionResult) => void;
+  onAnswer?: (answers: Record<string, string>) => void;
 }) => {
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  
   if (messageContent.type !== "tool_use") return null;
   
   const input = messageContent.input as AskUserQuestionInput | null;
   const questions = input?.questions ?? [];
-  const currentSignature = getAskUserQuestionSignature(input);
-  const requestSignature = getAskUserQuestionSignature(permissionRequest?.input as AskUserQuestionInput | undefined);
-  const isActiveRequest = permissionRequest && currentSignature === requestSignature;
+  
+  // Check if all questions are answered
+  const isComplete = questions.length > 0 && questions.every((_, idx) => answers[idx]);
+  
+  // Auto-detect yes/no questions and generate options
+  const getOptions = (q: { question: string; options?: Array<{ label: string }> }) => {
+    if (q.options && q.options.length > 0) return q.options;
+    
+    // Detect yes/no questions in Chinese
+    if (/是否|要不要|需不需要/.test(q.question)) {
+      return [{ label: "是" }, { label: "否" }];
+    }
+    return null;
+  };
+  
+  const handleSelect = (qIndex: number, label: string) => {
+    setAnswers(prev => ({ ...prev, [qIndex]: label }));
+  };
+  
+  const handleSubmit = () => {
+    if (!onAnswer || !isComplete) return;
+    const result: Record<string, string> = {};
+    questions.forEach((q, idx) => {
+      result[q.question] = answers[idx] || "";
+    });
+    onAnswer(result);
+  };
 
-  if (isActiveRequest && onPermissionResult) {
+  // If answered, just show completed state
+  if (input?.answers && Object.keys(input.answers).length > 0) {
     return (
-      <div className="mt-4">
-        <DecisionPanel
-          request={permissionRequest}
-          onSubmit={(result) => onPermissionResult(permissionRequest.toolUseId, result)}
-        />
+      <div className="flex flex-col gap-2 rounded-[1rem] bg-surface-tertiary px-3 py-2 mt-4">
+        <div className="flex flex-row items-center gap-2">
+          <StatusDot variant="success" isActive={false} isVisible={true} />
+          <span className="inline-flex items-center rounded-md text-accent py-0.5 text-sm font-medium">AskUserQuestion</span>
+        </div>
+        {questions.map((q, idx) => (
+          <div key={idx} className="text-sm text-ink-700 ml-4">
+            {q.question}: <span className="font-medium">{input.answers?.[q.question] || ""}</span>
+          </div>
+        ))}
       </div>
     );
   }
 
+  // Show interactive selection
   return (
-    <div className="flex flex-col gap-2 rounded-[1rem] bg-surface-tertiary px-3 py-2 mt-4">
-      <div className="flex flex-row items-center gap-2">
-        <StatusDot variant="success" isActive={false} isVisible={true} />
-        <span className="inline-flex items-center rounded-md text-accent py-0.5 text-sm font-medium">AskUserQuestion</span>
+    <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4 mt-4">
+      <div className="flex items-center gap-2 text-xs font-semibold text-accent mb-3">
+        <StatusDot variant="accent" isActive={true} isVisible={true} />
+        <span>AskUserQuestion</span>
       </div>
-      {questions.map((q, idx) => (
-        <div key={idx} className="text-sm text-ink-700 ml-4">{q.question}</div>
-      ))}
+      
+      {questions.map((q, qIndex) => {
+        const options = getOptions(q);
+        const selected = answers[qIndex];
+        
+        return (
+          <div key={qIndex} className={qIndex > 0 ? "mt-4 pt-3 border-t border-accent/10" : ""}>
+            <p className="text-sm font-medium text-ink-800 mb-2">{q.question}</p>
+            
+            {options ? (
+              <div className="flex flex-wrap gap-2">
+                {options.map((opt, optIdx) => (
+                  <button
+                    key={optIdx}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                      selected === opt.label
+                        ? "bg-accent text-white shadow-sm"
+                        : "bg-surface border border-ink-900/10 text-ink-700 hover:border-accent/40"
+                    }`}
+                    onClick={() => handleSelect(qIndex, opt.label)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <input
+                type="text"
+                className="w-full rounded-xl border border-ink-900/10 bg-surface px-4 py-2 text-sm"
+                placeholder="请输入..."
+                value={answers[qIndex] || ""}
+                onChange={(e) => handleSelect(qIndex, e.target.value)}
+              />
+            )}
+          </div>
+        );
+      })}
+      
+      {onAnswer && (
+        <button
+          className={`mt-4 px-5 py-2 rounded-full text-sm font-medium text-white transition-all ${
+            isComplete ? "bg-accent hover:bg-accent-hover" : "bg-ink-400/40 cursor-not-allowed"
+          }`}
+          onClick={handleSubmit}
+          disabled={!isComplete}
+        >
+          确认
+        </button>
+      )}
     </div>
   );
 };
 
 const SystemInfoCard = ({ message, showIndicator = false }: { message: SDKMessage; showIndicator?: boolean }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
   if (message.type !== "system" || !("subtype" in message) || message.subtype !== "init") return null;
   
   const systemMsg = message as any;
@@ -260,16 +441,31 @@ const SystemInfoCard = ({ message, showIndicator = false }: { message: SDKMessag
   );
   
   return (
-    <div className="flex flex-col gap-2">
-      <div className="header text-accent flex items-center gap-2">
-        <StatusDot variant="success" isActive={showIndicator} isVisible={showIndicator} />
-        System Init
-      </div>
-      <div className="flex flex-col rounded-xl px-4 py-2 border border-ink-900/10 bg-surface-secondary space-y-1">
-        <InfoItem name="Session ID" value={systemMsg.session_id || "-"} />
-        <InfoItem name="Model Name" value={systemMsg.model || "-"} />
-        <InfoItem name="Permission Mode" value={systemMsg.permissionMode || "-"} />
-        <InfoItem name="Working Directory" value={systemMsg.cwd || "-"} />
+    <div className="flex flex-col rounded-xl border border-ink-900/10 bg-surface-secondary overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between px-4 py-2.5 text-left cursor-pointer hover:bg-surface-tertiary transition-colors"
+      >
+        <div className="header text-accent flex items-center gap-2">
+          <StatusDot variant="success" isActive={showIndicator} isVisible={showIndicator} />
+          System Init
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted truncate max-w-[200px]">{systemMsg.model || "-"}</span>
+          <svg viewBox="0 0 24 24" className={`h-4 w-4 text-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+      </button>
+      <div className={`grid transition-all duration-200 ease-in-out ${isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden">
+          <div className="px-4 py-2 border-t border-ink-900/5 space-y-1">
+            <InfoItem name="Session ID" value={systemMsg.session_id || "-"} />
+            <InfoItem name="Model Name" value={systemMsg.model || "-"} />
+            <InfoItem name="Permission Mode" value={systemMsg.permissionMode || "-"} />
+            <InfoItem name="Working Directory" value={systemMsg.cwd || "-"} />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -289,14 +485,14 @@ export const MessageCard = memo(function MessageCard({
   message,
   isLast = false,
   isRunning = false,
-  permissionRequest,
-  onPermissionResult
+  showSystemInfo = false,
+  onAskUserQuestionAnswer
 }: {
   message: StreamMessage;
   isLast?: boolean;
   isRunning?: boolean;
-  permissionRequest?: PermissionRequest;
-  onPermissionResult?: (toolUseId: string, result: PermissionResult) => void;
+  showSystemInfo?: boolean;
+  onAskUserQuestionAnswer?: (toolUseId: string, answers: Record<string, string>) => void;
 }) {
   const showIndicator = isLast && isRunning;
 
@@ -310,14 +506,24 @@ export const MessageCard = memo(function MessageCard({
 
   const sdkMessage = message as SDKMessage;
 
+  // Hide system init and session result based on setting
+  if (sdkMessage.type === "system" && !showSystemInfo) {
+    return null;
+  }
+
   if (sdkMessage.type === "system") {
     return <SystemInfoCard message={sdkMessage} showIndicator={showIndicator} />;
   }
 
   if (sdkMessage.type === "result") {
+    // Always hide successful result unless showSystemInfo is true
+    if (sdkMessage.subtype === "success" && !showSystemInfo) {
+      return null;
+    }
     if (sdkMessage.subtype === "success") {
       return <SessionResult message={sdkMessage} />;
     }
+    // Always show errors
     return (
       <div className="flex flex-col gap-2 mt-4">
         <div className="header text-error">Session Error</div>
@@ -330,6 +536,7 @@ export const MessageCard = memo(function MessageCard({
 
   if (sdkMessage.type === "assistant") {
     const contents = sdkMessage.message.content;
+    
     return (
       <>
         {contents.map((content: MessageContent, idx: number) => {
@@ -342,7 +549,13 @@ export const MessageCard = memo(function MessageCard({
           }
           if (content.type === "tool_use") {
             if (content.name === "AskUserQuestion") {
-              return <AskUserQuestionCard key={idx} messageContent={content} permissionRequest={permissionRequest} onPermissionResult={onPermissionResult} />;
+              return (
+                <AskUserQuestionCard 
+                  key={idx} 
+                  messageContent={content}
+                  onAnswer={onAskUserQuestionAnswer ? (answers) => onAskUserQuestionAnswer(content.id, answers) : undefined}
+                />
+              );
             }
             return <ToolUseCard key={idx} messageContent={content} showIndicator={isLastContent && showIndicator} />;
           }

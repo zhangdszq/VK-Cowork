@@ -1,16 +1,5 @@
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
-import { execSync, spawn } from "child_process";
-import { app } from "electron";
 import { loadUserSettings } from "./user-settings.js";
 import { claudeCodeEnv } from "./claude-settings.js";
-
-export type InstallResult = {
-  success: boolean;
-  message: string;
-  output?: string;
-};
 
 export type EnvironmentCheck = {
   id: string;
@@ -25,142 +14,6 @@ export type EnvironmentCheckResult = {
 };
 
 /**
- * Build enhanced PATH that includes common Node.js/npm installation paths
- */
-function getEnhancedPath(): string {
-  const home = homedir();
-  const additionalPaths = [
-    // Homebrew paths
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    // npm global paths
-    `${home}/.npm-global/bin`,
-    `${home}/.npm/bin`,
-    "/usr/local/lib/node_modules/.bin",
-    // nvm paths (common versions)
-    `${home}/.nvm/versions/node/v20.0.0/bin`,
-    `${home}/.nvm/versions/node/v22.0.0/bin`,
-    `${home}/.nvm/versions/node/v18.0.0/bin`,
-    `${home}/.nvm/versions/node/v21.0.0/bin`,
-    // fnm paths
-    `${home}/.fnm/aliases/default/bin`,
-    `${home}/Library/Application Support/fnm/aliases/default/bin`,
-    // volta paths
-    `${home}/.volta/bin`,
-    // bun paths
-    `${home}/.bun/bin`,
-    // pnpm paths
-    `${home}/.local/share/pnpm`,
-    `${home}/Library/pnpm`,
-    // System paths
-    "/usr/bin",
-    "/bin",
-  ];
-  
-  const currentPath = process.env.PATH || "";
-  return [...additionalPaths, currentPath].join(":");
-}
-
-/**
- * Check if Claude CLI is available
- */
-function checkClaudeCLI(): EnvironmentCheck {
-  const enhancedPath = getEnhancedPath();
-  const home = homedir();
-  
-  // Direct path checks for common locations
-  const possibleClaudePaths = [
-    `${home}/.npm-global/bin/claude`,
-    `${home}/.npm/bin/claude`,
-    "/usr/local/bin/claude",
-    "/opt/homebrew/bin/claude",
-    `${home}/.bun/bin/claude`,
-    `${home}/.volta/bin/claude`,
-  ];
-  
-  // Check direct paths first
-  for (const claudePath of possibleClaudePaths) {
-    if (existsSync(claudePath)) {
-      return {
-        id: "claude-cli",
-        name: "Claude CLI",
-        status: "ok",
-        message: `已安装: ${claudePath}`,
-      };
-    }
-  }
-  
-  // Try with enhanced PATH
-  try {
-    const result = execSync("which claude", {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, PATH: enhancedPath },
-    });
-    
-    if (result.trim()) {
-      return {
-        id: "claude-cli",
-        name: "Claude CLI",
-        status: "ok",
-        message: `已安装: ${result.trim().split("\n")[0]}`,
-      };
-    }
-  } catch {
-    // Continue to alternative checks
-  }
-  
-  // Try running claude --version with enhanced PATH
-  try {
-    execSync("claude --version", {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, PATH: enhancedPath },
-    });
-    return {
-      id: "claude-cli",
-      name: "Claude CLI",
-      status: "ok",
-      message: "Claude CLI 可用",
-    };
-  } catch {
-    // Not found
-  }
-
-  return {
-    id: "claude-cli",
-    name: "Claude CLI",
-    status: "warning",
-    message: "未检测到 Claude CLI。点击下方按钮一键安装，或在终端运行: npm install -g @anthropic-ai/claude-code",
-  };
-}
-
-/**
- * Check if ~/.claude/settings.json exists
- */
-function checkClaudeSettings(): EnvironmentCheck {
-  const settingsPath = join(homedir(), ".claude", "settings.json");
-  
-  if (existsSync(settingsPath)) {
-    return {
-      id: "claude-settings",
-      name: "Claude Settings File",
-      status: "ok",
-      message: `Found: ${settingsPath}`,
-    };
-  }
-
-  return {
-    id: "claude-settings",
-    name: "Claude Settings File",
-    status: "warning",
-    message: "~/.claude/settings.json not found. You can configure API settings in this app.",
-  };
-}
-
-/**
  * Check if API Token is configured
  */
 function checkApiToken(): EnvironmentCheck {
@@ -173,7 +26,7 @@ function checkApiToken(): EnvironmentCheck {
       id: "api-token",
       name: "API Token",
       status: "ok",
-      message: "Configured in app settings",
+      message: "已在应用设置中配置",
     };
   }
 
@@ -182,7 +35,7 @@ function checkApiToken(): EnvironmentCheck {
       id: "api-token",
       name: "API Token",
       status: "ok",
-      message: "Configured in ~/.claude/settings.json or environment",
+      message: "已在环境变量中配置",
     };
   }
 
@@ -190,7 +43,7 @@ function checkApiToken(): EnvironmentCheck {
     id: "api-token",
     name: "API Token",
     status: "error",
-    message: "No API token configured. Please set it in Settings.",
+    message: "未配置 API Token，请在设置中配置",
   };
 }
 
@@ -207,7 +60,7 @@ function checkBaseUrl(): EnvironmentCheck {
       id: "base-url",
       name: "API Base URL",
       status: "ok",
-      message: `Custom: ${userSettings.anthropicBaseUrl}`,
+      message: `自定义: ${userSettings.anthropicBaseUrl}`,
     };
   }
 
@@ -216,7 +69,7 @@ function checkBaseUrl(): EnvironmentCheck {
       id: "base-url",
       name: "API Base URL",
       status: "ok",
-      message: `Custom: ${claudeCodeEnv.ANTHROPIC_BASE_URL}`,
+      message: `自定义: ${claudeCodeEnv.ANTHROPIC_BASE_URL}`,
     };
   }
 
@@ -224,88 +77,7 @@ function checkBaseUrl(): EnvironmentCheck {
     id: "base-url",
     name: "API Base URL",
     status: "ok",
-    message: "Using default Anthropic API",
-  };
-}
-
-/**
- * Check Node.js availability
- */
-function checkNodeJs(): EnvironmentCheck {
-  try {
-    const version = process.version;
-    const majorVersion = parseInt(version.slice(1).split(".")[0], 10);
-    
-    if (majorVersion >= 18) {
-      return {
-        id: "nodejs",
-        name: "Node.js",
-        status: "ok",
-        message: `Version ${version}`,
-      };
-    }
-
-    return {
-      id: "nodejs",
-      name: "Node.js",
-      status: "warning",
-      message: `Version ${version} (recommended: 18+)`,
-    };
-  } catch {
-    return {
-      id: "nodejs",
-      name: "Node.js",
-      status: "error",
-      message: "Unable to detect Node.js version",
-    };
-  }
-}
-
-/**
- * Check SDK availability
- */
-function checkSdk(): EnvironmentCheck {
-  // Check if SDK exists in node_modules (works for both CJS and ESM)
-  // Use app.getAppPath() for packaged app, process.cwd() for dev
-  const appPath = app.isPackaged ? app.getAppPath() : process.cwd();
-  
-  const possiblePaths = [
-    join(appPath, "node_modules", "@anthropic-ai", "claude-agent-sdk"),
-    join(process.cwd(), "node_modules", "@anthropic-ai", "claude-agent-sdk"),
-  ];
-  
-  for (const sdkPath of possiblePaths) {
-    if (existsSync(sdkPath)) {
-      // Try to read package.json to get version
-      try {
-        const pkgPath = join(sdkPath, "package.json");
-        if (existsSync(pkgPath)) {
-          const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-          return {
-            id: "sdk",
-            name: "Claude Agent SDK",
-            status: "ok",
-            message: `Installed (v${pkg.version})`,
-          };
-        }
-      } catch {
-        // Continue with basic check
-      }
-      
-      return {
-        id: "sdk",
-        name: "Claude Agent SDK",
-        status: "ok",
-        message: "Installed and available",
-      };
-    }
-  }
-  
-  return {
-    id: "sdk",
-    name: "Claude Agent SDK",
-    status: "error",
-    message: "SDK not found. Run: npm install @anthropic-ai/claude-agent-sdk",
+    message: "使用官方 API",
   };
 }
 
@@ -314,10 +86,6 @@ function checkSdk(): EnvironmentCheck {
  */
 export async function runEnvironmentChecks(): Promise<EnvironmentCheckResult> {
   const checks: EnvironmentCheck[] = [
-    checkNodeJs(),
-    checkSdk(),
-    checkClaudeCLI(),
-    checkClaudeSettings(),
     checkApiToken(),
     checkBaseUrl(),
   ];
@@ -348,7 +116,7 @@ export async function validateApiConfig(
   const token = authToken?.trim() || claudeCodeEnv.ANTHROPIC_AUTH_TOKEN;
 
   if (!token) {
-    return { valid: false, message: "API Token is required" };
+    return { valid: false, message: "API Token 是必需的" };
   }
 
   try {
@@ -368,390 +136,19 @@ export async function validateApiConfig(
 
     // 200 = success, 400 = bad request but auth passed
     if (response.ok || response.status === 400) {
-      return { valid: true, message: "Connection successful" };
+      return { valid: true, message: "连接成功" };
     }
 
     // 401/403 = auth failed
     if (response.status === 401 || response.status === 403) {
-      return { valid: false, message: "Authentication failed: Invalid API token" };
+      return { valid: false, message: "认证失败: API Token 无效" };
     }
 
     // Other errors
     const errorText = await response.text().catch(() => "");
-    return { valid: false, message: `API error (${response.status}): ${errorText.slice(0, 100)}` };
+    return { valid: false, message: `API 错误 (${response.status}): ${errorText.slice(0, 100)}` };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { valid: false, message: `Connection failed: ${message}` };
+    return { valid: false, message: `连接失败: ${message}` };
   }
-}
-
-/**
- * Install Claude CLI globally using npm
- */
-export async function installClaudeCLI(
-  onProgress?: (message: string) => void
-): Promise<InstallResult> {
-  return new Promise((resolve) => {
-    onProgress?.("Starting installation...");
-    
-    // Build enhanced PATH to find npm/node
-    const home = homedir();
-    const additionalPaths = [
-      "/usr/local/bin",
-      "/opt/homebrew/bin",
-      `${home}/.bun/bin`,
-      `${home}/.nvm/versions/node/v20.0.0/bin`,
-      `${home}/.nvm/versions/node/v22.0.0/bin`,
-      `${home}/.nvm/versions/node/v18.0.0/bin`,
-      `${home}/.volta/bin`,
-      `${home}/.fnm/aliases/default/bin`,
-      "/usr/bin",
-      "/bin",
-    ];
-    const currentPath = process.env.PATH || "";
-    const enhancedPath = [...additionalPaths, currentPath].join(":");
-
-    // Try to find npm or bun
-    let packageManager = "npm";
-    try {
-      execSync("which bun", { 
-        encoding: "utf8", 
-        env: { ...process.env, PATH: enhancedPath } 
-      });
-      packageManager = "bun";
-    } catch {
-      // Use npm
-    }
-
-    onProgress?.(`Using ${packageManager} to install...`);
-
-    const installCmd = packageManager === "bun" 
-      ? "bun" 
-      : "npm";
-    const installArgs = packageManager === "bun"
-      ? ["install", "-g", "@anthropic-ai/claude-code"]
-      : ["install", "-g", "@anthropic-ai/claude-code"];
-
-    const child = spawn(installCmd, installArgs, {
-      env: { ...process.env, PATH: enhancedPath },
-      shell: true,
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout?.on("data", (data) => {
-      const text = data.toString();
-      stdout += text;
-      onProgress?.(text.trim());
-    });
-
-    child.stderr?.on("data", (data) => {
-      const text = data.toString();
-      stderr += text;
-      // Some npm output goes to stderr
-      if (!text.includes("WARN")) {
-        onProgress?.(text.trim());
-      }
-    });
-
-    child.on("error", (error) => {
-      resolve({
-        success: false,
-        message: `Failed to start installation: ${error.message}`,
-        output: stderr,
-      });
-    });
-
-    child.on("close", (code) => {
-      if (code === 0) {
-        onProgress?.("Installation completed successfully!");
-        resolve({
-          success: true,
-          message: "Claude CLI installed successfully",
-          output: stdout,
-        });
-      } else {
-        resolve({
-          success: false,
-          message: `Installation failed with exit code ${code}`,
-          output: stderr || stdout,
-        });
-      }
-    });
-  });
-}
-
-/**
- * Check if Claude CLI is installed (quick check)
- */
-export function isClaudeCLIInstalled(): boolean {
-  const enhancedPath = getEnhancedPath();
-  const home = homedir();
-  
-  // Direct path checks
-  const possibleClaudePaths = [
-    `${home}/.npm-global/bin/claude`,
-    `${home}/.npm/bin/claude`,
-    "/usr/local/bin/claude",
-    "/opt/homebrew/bin/claude",
-    `${home}/.bun/bin/claude`,
-    `${home}/.volta/bin/claude`,
-  ];
-  
-  for (const claudePath of possibleClaudePaths) {
-    if (existsSync(claudePath)) {
-      return true;
-    }
-  }
-  
-  // Try with enhanced PATH
-  try {
-    execSync("which claude", {
-      encoding: "utf8",
-      timeout: 3000,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, PATH: enhancedPath },
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Install Node.js (via Homebrew on macOS, or provide download link)
- */
-export async function installNodeJs(
-  onProgress?: (message: string) => void
-): Promise<InstallResult> {
-  const platform = process.platform;
-  
-  if (platform === "darwin") {
-    // macOS - try Homebrew first
-    return new Promise((resolve) => {
-      onProgress?.("Checking for Homebrew...");
-      
-      try {
-        execSync("which brew", { encoding: "utf8", timeout: 3000 });
-      } catch {
-        resolve({
-          success: false,
-          message: "Homebrew not found. Please install Node.js manually from https://nodejs.org/",
-        });
-        return;
-      }
-      
-      onProgress?.("Installing Node.js via Homebrew...");
-      
-      const child = spawn("brew", ["install", "node"], {
-        shell: true,
-      });
-      
-      let stdout = "";
-      let stderr = "";
-      
-      child.stdout?.on("data", (data) => {
-        const text = data.toString();
-        stdout += text;
-        onProgress?.(text.trim());
-      });
-      
-      child.stderr?.on("data", (data) => {
-        const text = data.toString();
-        stderr += text;
-        onProgress?.(text.trim());
-      });
-      
-      child.on("error", (error) => {
-        resolve({
-          success: false,
-          message: `Failed to install Node.js: ${error.message}`,
-          output: stderr,
-        });
-      });
-      
-      child.on("close", (code) => {
-        if (code === 0) {
-          onProgress?.("Node.js installed successfully!");
-          resolve({
-            success: true,
-            message: "Node.js installed successfully",
-            output: stdout,
-          });
-        } else {
-          resolve({
-            success: false,
-            message: `Installation failed with exit code ${code}`,
-            output: stderr || stdout,
-          });
-        }
-      });
-    });
-  } else if (platform === "win32") {
-    // Windows - provide download link
-    return {
-      success: false,
-      message: "Please download and install Node.js from https://nodejs.org/",
-    };
-  } else {
-    // Linux - try apt or yum
-    return new Promise((resolve) => {
-      onProgress?.("Installing Node.js...");
-      
-      // Try apt first (Debian/Ubuntu)
-      let cmd = "apt";
-      let args = ["install", "-y", "nodejs", "npm"];
-      
-      try {
-        execSync("which apt", { encoding: "utf8", timeout: 3000 });
-      } catch {
-        // Try yum (RHEL/CentOS)
-        try {
-          execSync("which yum", { encoding: "utf8", timeout: 3000 });
-          cmd = "yum";
-          args = ["install", "-y", "nodejs"];
-        } catch {
-          resolve({
-            success: false,
-            message: "Please install Node.js manually from https://nodejs.org/",
-          });
-          return;
-        }
-      }
-      
-      const child = spawn("sudo", [cmd, ...args], {
-        shell: true,
-      });
-      
-      let stdout = "";
-      let stderr = "";
-      
-      child.stdout?.on("data", (data) => {
-        const text = data.toString();
-        stdout += text;
-        onProgress?.(text.trim());
-      });
-      
-      child.stderr?.on("data", (data) => {
-        const text = data.toString();
-        stderr += text;
-        onProgress?.(text.trim());
-      });
-      
-      child.on("close", (code) => {
-        if (code === 0) {
-          onProgress?.("Node.js installed successfully!");
-          resolve({
-            success: true,
-            message: "Node.js installed successfully",
-            output: stdout,
-          });
-        } else {
-          resolve({
-            success: false,
-            message: `Installation failed. Please install manually from https://nodejs.org/`,
-            output: stderr || stdout,
-          });
-        }
-      });
-    });
-  }
-}
-
-/**
- * Install Claude Agent SDK
- */
-export async function installSdk(
-  onProgress?: (message: string) => void
-): Promise<InstallResult> {
-  return new Promise((resolve) => {
-    onProgress?.("Installing Claude Agent SDK...");
-    
-    // Build enhanced PATH
-    const home = homedir();
-    const additionalPaths = [
-      "/usr/local/bin",
-      "/opt/homebrew/bin",
-      `${home}/.bun/bin`,
-      `${home}/.nvm/versions/node/v20.0.0/bin`,
-      `${home}/.nvm/versions/node/v22.0.0/bin`,
-      `${home}/.nvm/versions/node/v18.0.0/bin`,
-      `${home}/.volta/bin`,
-      `${home}/.fnm/aliases/default/bin`,
-      "/usr/bin",
-      "/bin",
-    ];
-    const currentPath = process.env.PATH || "";
-    const enhancedPath = [...additionalPaths, currentPath].join(":");
-
-    // Try to find npm or bun
-    let packageManager = "npm";
-    try {
-      execSync("which bun", { 
-        encoding: "utf8", 
-        env: { ...process.env, PATH: enhancedPath } 
-      });
-      packageManager = "bun";
-    } catch {
-      // Use npm
-    }
-
-    onProgress?.(`Using ${packageManager} to install...`);
-
-    // Install in app directory
-    const appPath = app.isPackaged ? app.getAppPath() : process.cwd();
-    
-    const installArgs = packageManager === "bun"
-      ? ["add", "@anthropic-ai/claude-agent-sdk"]
-      : ["install", "@anthropic-ai/claude-agent-sdk"];
-
-    const child = spawn(packageManager, installArgs, {
-      cwd: appPath,
-      env: { ...process.env, PATH: enhancedPath },
-      shell: true,
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout?.on("data", (data) => {
-      const text = data.toString();
-      stdout += text;
-      onProgress?.(text.trim());
-    });
-
-    child.stderr?.on("data", (data) => {
-      const text = data.toString();
-      stderr += text;
-      if (!text.includes("WARN")) {
-        onProgress?.(text.trim());
-      }
-    });
-
-    child.on("error", (error) => {
-      resolve({
-        success: false,
-        message: `Failed to install SDK: ${error.message}`,
-        output: stderr,
-      });
-    });
-
-    child.on("close", (code) => {
-      if (code === 0) {
-        onProgress?.("SDK installed successfully!");
-        resolve({
-          success: true,
-          message: "Claude Agent SDK installed successfully",
-          output: stdout,
-        });
-      } else {
-        resolve({
-          success: false,
-          message: `Installation failed with exit code ${code}`,
-          output: stderr || stdout,
-        });
-      }
-    });
-  });
 }

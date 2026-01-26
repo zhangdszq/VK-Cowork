@@ -283,8 +283,11 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
   // Check if we should show skills selector
   useEffect(() => {
     const trimmed = prompt.trimStart();
-    if (trimmed.startsWith("/")) {
-      const filterPart = trimmed.split(" ")[0];
+    // Show skills selector only when:
+    // 1. Prompt starts with /
+    // 2. No space after the slash command (still typing the command name)
+    if (trimmed.startsWith("/") && !trimmed.includes(" ")) {
+      const filterPart = trimmed;
       setSkillFilter(filterPart);
       setShowSkills(true);
       setSelectedIndex(0);
@@ -325,15 +328,15 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
           });
         }
         
-        // Also set prompt with skill reference for future messages
-        setPrompt(`@${skill.name} `);
+        // Also set prompt with skill slash command for Claude to use
+        setPrompt(`/${skill.name} `);
       } else {
         // Fallback if content couldn't be loaded
-        setPrompt(`@${skill.name} `);
+        setPrompt(`/${skill.name} `);
       }
     } catch (error) {
       console.error("Failed to load skill content:", error);
-      setPrompt(`@${skill.name} `);
+      setPrompt(`/${skill.name} `);
     }
     
     promptRef.current?.focus();

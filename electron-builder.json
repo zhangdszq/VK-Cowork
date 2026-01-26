@@ -8,9 +8,7 @@
     "extraResources": [
         "dist-electron/preload.cjs"
     ],
-    "asarUnpack": [
-        "node_modules/@anthropic-ai/claude-agent-sdk/**/*"
-    ],
+    "asarUnpack": [],
     "icon": "./claude-color.png",
     "mac": {
         "target": "dmg",
@@ -18,15 +16,45 @@
         "entitlementsInherit": "build/entitlements.mac.plist",
         "hardenedRuntime": true,
         "gatekeeperAssess": false,
-        "notarize": false
+        "notarize": false,
+        "extraResources": [
+            {
+                "from": "src-api/dist/agent-api-aarch64-apple-darwin",
+                "to": "sidecar/agent-api-aarch64-apple-darwin"
+            },
+            {
+                "from": "cli-bundle",
+                "to": "cli-bundle"
+            }
+        ]
     },
     "linux": {
         "target": "AppImage",
-        "category": "Utility"
+        "category": "Utility",
+        "extraResources": [
+            {
+                "from": "src-api/dist/agent-api-x86_64-unknown-linux-gnu",
+                "to": "sidecar/agent-api-x86_64-unknown-linux-gnu"
+            },
+            {
+                "from": "cli-bundle",
+                "to": "cli-bundle"
+            }
+        ]
     },
     "win": {
         "target": [
             "portable"
+        ],
+        "extraResources": [
+            {
+                "from": "src-api/dist/agent-api-x86_64-pc-windows-msvc.exe",
+                "to": "sidecar/agent-api-x86_64-pc-windows-msvc.exe"
+            },
+            {
+                "from": "cli-bundle",
+                "to": "cli-bundle"
+            }
         ]
     }
 }

@@ -1,0 +1,31 @@
+{
+  "name": "agent-cowork-api",
+  "version": "0.0.2",
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx --watch src/index.ts",
+    "build": "tsc",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs",
+    "build:binary": "npm run bundle && pkg dist/bundle.cjs --targets node20-macos-arm64 --output dist/agent-api-aarch64-apple-darwin --options expose-gc",
+    "build:binary:mac-arm": "npm run bundle && pkg dist/bundle.cjs --targets node20-macos-arm64 --output dist/agent-api-aarch64-apple-darwin --options expose-gc",
+    "build:binary:mac-intel": "npm run bundle && pkg dist/bundle.cjs --targets node20-macos-x64 --output dist/agent-api-x86_64-apple-darwin --options expose-gc",
+    "build:binary:linux": "npm run bundle && pkg dist/bundle.cjs --targets node20-linux-x64 --output dist/agent-api-x86_64-unknown-linux-gnu --options expose-gc",
+    "build:binary:windows": "npm run bundle && pkg dist/bundle.cjs --targets node20-win-x64 --output dist/agent-api-x86_64-pc-windows-msvc.exe --options expose-gc"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.6",
+    "@hono/node-server": "^1.14.1",
+    "hono": "^4.7.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "@yao-pkg/pkg": "^6.0.0",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.3"
+  },
+  "pkg": {
+    "scripts": "dist/**/*.js",
+    "outputPath": "dist"
+  }
+}

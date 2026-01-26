@@ -91,6 +91,7 @@ type EventPayloadMapping = {
     "save-mcp-server": SaveMcpResult;
     "delete-mcp-server": SaveMcpResult;
     "read-skill-content": string | null;
+    "is-sidecar-running": boolean;
 }
 
 interface Window {

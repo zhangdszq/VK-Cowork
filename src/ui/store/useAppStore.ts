@@ -30,6 +30,7 @@ interface AppState {
   sessionsLoaded: boolean;
   showStartModal: boolean;
   historyRequested: Set<string>;
+  showSystemInfo: boolean;  // Toggle for showing System Init and Session Result
 
   setPrompt: (prompt: string) => void;
   setCwd: (cwd: string) => void;
@@ -41,6 +42,7 @@ interface AppState {
   resolvePermissionRequest: (sessionId: string, toolUseId: string) => void;
   handleServerEvent: (event: ServerEvent) => void;
   addLocalMessage: (sessionId: string, message: StreamMessage) => void;
+  setShowSystemInfo: (show: boolean) => void;
 }
 
 function createSession(id: string): SessionView {
@@ -57,6 +59,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessionsLoaded: false,
   showStartModal: false,
   historyRequested: new Set(),
+  showSystemInfo: false,  // Default to hidden
 
   setPrompt: (prompt) => set({ prompt }),
   setCwd: (cwd) => set({ cwd }),
@@ -64,6 +67,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setGlobalError: (globalError) => set({ globalError }),
   setShowStartModal: (showStartModal) => set({ showStartModal }),
   setActiveSessionId: (id) => set({ activeSessionId: id }),
+  setShowSystemInfo: (showSystemInfo) => set({ showSystemInfo }),
 
   markHistoryRequested: (sessionId) => {
     set((state) => {

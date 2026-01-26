@@ -3,17 +3,29 @@ import { ipcMainHandle, isDev, DEV_PORT } from "./util.js";
 import { getPreloadPath, getUIPath, getIconPath } from "./pathResolver.js";
 import { getStaticData, pollResources } from "./test.js";
 import { handleClientEvent, sessions } from "./ipc-handlers.js";
-import { generateSessionTitle } from "./libs/util.js";
 import type { ClientEvent } from "./types.js";
 import "./libs/claude-settings.js";
 import { loadUserSettings, saveUserSettings, type UserSettings } from "./libs/user-settings.js";
 import { reloadClaudeSettings } from "./libs/claude-settings.js";
-import { runEnvironmentChecks, validateApiConfig, installClaudeCLI, isClaudeCLIInstalled, installNodeJs, installSdk } from "./libs/env-check.js";
+import { runEnvironmentChecks, validateApiConfig } from "./libs/env-check.js";
+import { startSidecar, stopSidecar, isSidecarAvailable, isSidecarRunning } from "./libs/sidecar.js";
 import { readFileSync, readdirSync, existsSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
-app.on("ready", () => {
+app.on("ready", async () => {
+    // Start the API sidecar if available
+    if (isSidecarAvailable()) {
+        console.log("Starting API sidecar...");
+        const started = await startSidecar();
+        if (started) {
+            console.log("API sidecar started successfully");
+        } else {
+            console.warn("Failed to start API sidecar, running in fallback mode");
+        }
+    } else {
+        console.log("API sidecar not found, running in fallback mode");
+    }
     const mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -42,9 +54,12 @@ app.on("ready", () => {
         handleClientEvent(event);
     });
 
-    // Handle session title generation
+    // Handle session title generation (simple fallback - can be enhanced later)
     ipcMainHandle("generate-session-title", async (_: any, userInput: string | null) => {
-        return await generateSessionTitle(userInput);
+        if (!userInput) return "New Session";
+        // Simple title generation - truncate to reasonable length
+        const title = userInput.slice(0, 50).trim();
+        return title || "New Session";
     });
 
     // Handle recent cwds request
@@ -120,35 +135,6 @@ app.on("ready", () => {
         return false;
     });
 
-    // Install Claude CLI
-    ipcMainHandle("install-claude-cli", async () => {
-        const result = await installClaudeCLI((message) => {
-            // Send progress to renderer
-            mainWindow.webContents.send("install-progress", message);
-        });
-        return result;
-    });
-
-    // Quick check if Claude CLI is installed
-    ipcMainHandle("is-claude-cli-installed", () => {
-        return isClaudeCLIInstalled();
-    });
-
-    // Install Node.js
-    ipcMainHandle("install-nodejs", async () => {
-        const result = await installNodeJs((message) => {
-            mainWindow.webContents.send("install-progress", message);
-        });
-        return result;
-    });
-
-    // Install Claude Agent SDK
-    ipcMainHandle("install-sdk", async () => {
-        const result = await installSdk((message) => {
-            mainWindow.webContents.send("install-progress", message);
-        });
-        return result;
-    });
 
     // Handle image selection (returns path only, Agent will use built-in analyze_image tool)
     ipcMainHandle("select-image", async () => {
@@ -391,4 +377,15 @@ app.on("ready", () => {
             return null;
         }
     });
-})
+
+    // Check if sidecar is running
+    ipcMainHandle("is-sidecar-running", () => {
+        return isSidecarRunning();
+    });
+});
+
+// Stop sidecar when app is quitting
+app.on("will-quit", () => {
+    console.log("Stopping API sidecar...");
+    stopSidecar();
+});

@@ -1,8 +1,14 @@
+/**
+ * Direct Claude runner for fallback mode when sidecar isn't available.
+ * This is used in development or when the API sidecar fails to start.
+ */
 import { query, type SDKMessage, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerEvent } from "../types.js";
 import type { Session } from "./session-store.js";
-import { claudeCodePath, enhancedEnv} from "./util.js";
-
+import { claudeCodeEnv } from "./claude-settings.js";
+import { app } from "electron";
+import { join } from "path";
+import { homedir } from "os";
 
 export type RunnerOptions = {
   prompt: string;
@@ -18,6 +24,52 @@ export type RunnerHandle = {
 
 const DEFAULT_CWD = process.cwd();
 
+// Get Claude Code CLI path for packaged app
+function getClaudeCodePath(): string | undefined {
+  if (app.isPackaged) {
+    // Check for bundled CLI first
+    const bundledCliPath = join(process.resourcesPath, 'cli-bundle', 'claude');
+    const { existsSync } = require('fs');
+    if (existsSync(bundledCliPath)) {
+      return bundledCliPath;
+    }
+    // Fall back to unpacked SDK
+    return join(
+      process.resourcesPath,
+      'app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk/cli.js'
+    );
+  }
+  return undefined;
+}
+
+// Build enhanced PATH for packaged environment
+function getEnhancedEnv(): Record<string, string | undefined> {
+  const home = homedir();
+  const additionalPaths = [
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    `${home}/.bun/bin`,
+    `${home}/.nvm/versions/node/v20.0.0/bin`,
+    `${home}/.nvm/versions/node/v22.0.0/bin`,
+    `${home}/.nvm/versions/node/v18.0.0/bin`,
+    `${home}/.volta/bin`,
+    `${home}/.fnm/aliases/default/bin`,
+    '/usr/bin',
+    '/bin',
+  ];
+
+  const currentPath = process.env.PATH || '';
+  const newPath = [...additionalPaths, currentPath].join(':');
+
+  return {
+    ...process.env,
+    ...claudeCodeEnv,
+    PATH: newPath,
+  };
+}
+
+const claudeCodePath = getClaudeCodePath();
+const enhancedEnv = getEnhancedEnv();
 
 export async function runClaude(options: RunnerOptions): Promise<RunnerHandle> {
   const { prompt, session, resumeSessionId, onEvent, onSessionUpdate } = options;
@@ -51,10 +103,13 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerHandle> {
           permissionMode: "bypassPermissions",
           includePartialMessages: true,
           allowDangerouslySkipPermissions: true,
-          canUseTool: async (toolName, input, { signal }) => {
+          // Load user settings to enable skills from ~/.claude/skills/
+          settingSources: ["user", "project", "local"],
+          canUseTool: async (toolName, input, { signal, toolUseID }) => {
             // For AskUserQuestion, we need to wait for user response
             if (toolName === "AskUserQuestion") {
-              const toolUseId = crypto.randomUUID();
+              // Use the SDK's toolUseID for proper matching
+              const toolUseId = toolUseID;
 
               // Send permission request to frontend
               sendPermissionRequest(toolUseId, toolName, input);
@@ -89,7 +144,7 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerHandle> {
       for await (const message of q) {
         // Extract session_id from system init message
         if (message.type === "system" && "subtype" in message && message.subtype === "init") {
-          const sdkSessionId = message.session_id;
+          const sdkSessionId = (message as any).session_id;
           if (sdkSessionId) {
             session.claudeSessionId = sdkSessionId;
             onSessionUpdate?.({ claudeSessionId: sdkSessionId });
@@ -101,7 +156,7 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerHandle> {
 
         // Check for result to update session status
         if (message.type === "result") {
-          const status = message.subtype === "success" ? "completed" : "error";
+          const status = (message as any).subtype === "success" ? "completed" : "error";
           onEvent({
             type: "session.status",
             payload: { sessionId: session.id, status, title: session.title }

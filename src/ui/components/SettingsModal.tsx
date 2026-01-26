@@ -6,42 +6,6 @@ interface SettingsModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Status icon component
-function StatusIcon({ status }: { status: EnvironmentCheck["status"] }) {
-  if (status === "checking") {
-    return (
-      <svg className="h-4 w-4 animate-spin text-muted" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (status === "ok") {
-    return (
-      <svg className="h-4 w-4 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
-      </svg>
-    );
-  }
-  if (status === "warning") {
-    return (
-      <svg className="h-4 w-4 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-        <line x1="12" y1="9" x2="12" y2="13" />
-        <line x1="12" y1="17" x2="12.01" y2="17" />
-      </svg>
-    );
-  }
-  return (
-    <svg className="h-4 w-4 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  );
-}
-
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [baseUrl, setBaseUrl] = useState("");
   const [authToken, setAuthToken] = useState("");
@@ -52,16 +16,6 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   // Validation state
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  
-  // Environment check state
-  const [envChecks, setEnvChecks] = useState<EnvironmentCheck[]>([]);
-  const [checking, setChecking] = useState(false);
-  const [showChecks, setShowChecks] = useState(false);
-  
-  // Install CLI state
-  const [installing, setInstalling] = useState(false);
-  const [installProgress, setInstallProgress] = useState<string>("");
-  const [installError, setInstallError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -71,84 +25,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         setSaved(false);
         setValidationError(null);
       });
-      // Reset check state when opening
-      setEnvChecks([]);
-      setShowChecks(false);
-      setInstallError(null);
-      setInstallProgress("");
     }
   }, [open]);
-
-  // Listen for install progress
-  useEffect(() => {
-    const unsubscribe = window.electron.onInstallProgress((message) => {
-      setInstallProgress(message);
-    });
-    return unsubscribe;
-  }, []);
-
-  const handleCheckEnvironment = async () => {
-    setChecking(true);
-    setShowChecks(true);
-    setInstallError(null);
-    // Show checking state
-    setEnvChecks([
-      { id: "nodejs", name: "Node.js", status: "checking", message: "Checking..." },
-      { id: "sdk", name: "Claude Agent SDK", status: "checking", message: "Checking..." },
-      { id: "claude-cli", name: "Claude CLI", status: "checking", message: "Checking..." },
-      { id: "claude-settings", name: "Claude Settings File", status: "checking", message: "Checking..." },
-      { id: "api-token", name: "API Token", status: "checking", message: "Checking..." },
-      { id: "base-url", name: "API Base URL", status: "checking", message: "Checking..." },
-    ]);
-    
-    try {
-      const result = await window.electron.checkEnvironment();
-      setEnvChecks(result.checks);
-    } catch (error) {
-      console.error("Environment check failed:", error);
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  // Generic install handler
-  const handleInstall = async (type: "cli" | "nodejs" | "sdk") => {
-    setInstalling(true);
-    setInstallError(null);
-    setInstallProgress("Starting installation...");
-    
-    try {
-      let result: InstallResult;
-      
-      switch (type) {
-        case "cli":
-          result = await window.electron.installClaudeCLI();
-          break;
-        case "nodejs":
-          result = await window.electron.installNodeJs();
-          break;
-        case "sdk":
-          result = await window.electron.installSdk();
-          break;
-      }
-      
-      if (result.success) {
-        setInstallProgress("Installation completed!");
-        // Re-run environment check after successful installation
-        setTimeout(() => {
-          handleCheckEnvironment();
-        }, 1000);
-      } else {
-        setInstallError(result.message);
-        setInstallProgress("");
-      }
-    } catch (error) {
-      setInstallError("Installation failed: " + (error instanceof Error ? error.message : String(error)));
-      setInstallProgress("");
-    } finally {
-      setInstalling(false);
-    }
-  };
 
   const handleSave = async () => {
     setValidationError(null);
@@ -227,10 +105,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           </div>
 
           <p className="mt-2 text-sm text-muted">
-            Configure custom API settings. Leave empty to use{" "}
-            <code className="rounded bg-surface-tertiary px-1.5 py-0.5 text-xs font-mono">
-              ~/.claude/settings.json
-            </code>
+            Configure your Anthropic API settings for Claude.
           </p>
 
           <div className="mt-5 grid gap-4">
@@ -254,7 +129,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                 <input
                   type={showToken ? "text" : "password"}
                   className="w-full rounded-xl border border-ink-900/10 bg-surface-secondary px-4 py-2.5 pr-12 text-sm text-ink-800 placeholder:text-muted-light focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20 transition-colors font-mono"
-                  placeholder="sk-ant-... (optional)"
+                  placeholder="sk-ant-..."
                   value={authToken}
                   onChange={(e) => setAuthToken(e.target.value)}
                 />
@@ -278,7 +153,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                 </button>
               </div>
               <span className="text-[11px] text-muted-light">
-                Your Anthropic API key or compatible service token
+                Your Anthropic API key from{" "}
+                <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                  console.anthropic.com
+                </a>
               </span>
             </label>
 
@@ -345,143 +223,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
 
           <div className="mt-4 rounded-xl border border-info/20 bg-info/5 p-3">
             <p className="text-xs text-info">
-              <strong>Note:</strong> Settings configured here take priority over{" "}
-              <code className="rounded bg-info/10 px-1 py-0.5 font-mono">~/.claude/settings.json</code>.
+              <strong>Note:</strong> Settings configured here take priority over environment variables.
               Changes apply to new sessions only.
             </p>
-          </div>
-
-          {/* Environment Check Section */}
-          <div className="mt-5 border-t border-ink-900/10 pt-5">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-ink-800">Environment Check</span>
-              <button
-                type="button"
-                onClick={handleCheckEnvironment}
-                disabled={checking}
-                className="rounded-lg border border-ink-900/10 bg-surface px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-tertiary transition-colors disabled:opacity-50"
-              >
-                {checking ? "Checking..." : "Run Check"}
-              </button>
-            </div>
-
-            {showChecks && (
-              <div className="mt-3 rounded-xl border border-ink-900/10 bg-surface-secondary overflow-hidden">
-                {envChecks.map((check, index) => (
-                  <div
-                    key={check.id}
-                    className={`flex items-start gap-3 px-4 py-3 ${
-                      index !== envChecks.length - 1 ? "border-b border-ink-900/5" : ""
-                    }`}
-                  >
-                    <div className="mt-0.5 flex-shrink-0">
-                      <StatusIcon status={check.status} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-ink-800">{check.name}</div>
-                      <div className={`text-xs mt-0.5 ${
-                        check.status === "error" ? "text-error" : 
-                        check.status === "warning" ? "text-warning" : 
-                        "text-muted"
-                      }`}>
-                        {check.message}
-                      </div>
-                      {/* Show install button for items that can be installed */}
-                      {(check.status === "warning" || check.status === "error") && (
-                        <>
-                          {check.id === "claude-cli" && (
-                            <button
-                              type="button"
-                              onClick={() => handleInstall("cli")}
-                              disabled={installing}
-                              className="mt-2 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {installing ? (
-                                <span className="flex items-center gap-1.5">
-                                  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                  </svg>
-                                  Installing...
-                                </span>
-                              ) : (
-                                "Install Claude CLI"
-                              )}
-                            </button>
-                          )}
-                          {check.id === "nodejs" && (
-                            <button
-                              type="button"
-                              onClick={() => handleInstall("nodejs")}
-                              disabled={installing}
-                              className="mt-2 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {installing ? (
-                                <span className="flex items-center gap-1.5">
-                                  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                  </svg>
-                                  Installing...
-                                </span>
-                              ) : (
-                                "Install Node.js"
-                              )}
-                            </button>
-                          )}
-                          {check.id === "sdk" && (
-                            <button
-                              type="button"
-                              onClick={() => handleInstall("sdk")}
-                              disabled={installing}
-                              className="mt-2 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {installing ? (
-                                <span className="flex items-center gap-1.5">
-                                  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                  </svg>
-                                  Installing...
-                                </span>
-                              ) : (
-                                "Install SDK"
-                              )}
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Install progress */}
-            {installProgress && (
-              <div className="mt-3 rounded-xl border border-info/20 bg-info/5 p-3">
-                <p className="text-xs text-info font-mono">{installProgress}</p>
-              </div>
-            )}
-
-            {/* Install error */}
-            {installError && (
-              <div className="mt-3 rounded-xl border border-error/20 bg-error/5 p-3">
-                <p className="text-xs text-error">{installError}</p>
-              </div>
-            )}
-
-            {showChecks && !checking && (
-              <div className="mt-3 text-xs text-muted">
-                {envChecks.every(c => c.status === "ok") ? (
-                  <span className="text-success">✓ All checks passed</span>
-                ) : envChecks.some(c => c.status === "error") ? (
-                  <span className="text-error">✗ Some checks failed. Please fix the issues above.</span>
-                ) : (
-                  <span className="text-warning">⚠ Some warnings. The app may still work.</span>
-                )}
-              </div>
-            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>

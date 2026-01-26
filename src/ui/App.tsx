@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { useIPC } from "./hooks/useIPC";
 import { useAppStore } from "./store/useAppStore";
@@ -9,7 +9,13 @@ import { PromptInput, usePromptActions } from "./components/PromptInput";
 import { MessageCard } from "./components/EventCard";
 import { MessageSkeleton } from "./components/MessageSkeleton";
 import { McpSkillModal } from "./components/McpSkillModal";
+import { OnboardingWizard } from "./components/OnboardingWizard";
+import { DecisionPanel } from "./components/DecisionPanel";
+import { ChapterSelector, parseChapters, isChapterSelectionText } from "./components/ChapterSelector";
 import MDContent from "./render/markdown";
+import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
+
+const ONBOARDING_COMPLETE_KEY = "agent-cowork-onboarding-complete";
 
 // 按 session 存储的 partialMessage 状态
 type SessionPartialState = {
@@ -19,6 +25,17 @@ type SessionPartialState = {
 
 function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    // Check if onboarding was completed before
+    return !localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+  });
+
+  const handleOnboardingComplete = useCallback(() => {
+    localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
+    setShowOnboarding(false);
+  }, []);
   
   // 使用 Map 按 sessionId 存储每个 session 的 partial message 状态
   const partialMessagesRef = useRef<Map<string, string>>(new Map());
@@ -39,6 +56,8 @@ function App() {
   const cwd = useAppStore((s) => s.cwd);
   const setCwd = useAppStore((s) => s.setCwd);
   const pendingStart = useAppStore((s) => s.pendingStart);
+  const showSystemInfo = useAppStore((s) => s.showSystemInfo);
+  const setShowSystemInfo = useAppStore((s) => s.setShowSystemInfo);
 
   // Helper function to extract partial message content
   const getPartialMessageContent = (eventMessage: any) => {
@@ -107,6 +126,72 @@ function App() {
   const messages = activeSession?.messages ?? [];
   const permissionRequests = activeSession?.permissionRequests ?? [];
   const isRunning = activeSession?.status === "running";
+
+  // Check if the last assistant message contains chapter selection prompt
+  const chapterSelectionInfo = useMemo(() => {
+    if (isRunning) return null; // Don't show while running
+    
+    // Find last assistant message with text content
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg && 'type' in msg && msg.type === 'assistant') {
+        const assistantMsg = msg as SDKAssistantMessage;
+        const textContent = assistantMsg.message?.content?.find(
+          (c: any) => c.type === 'text'
+        );
+        if (textContent && 'text' in textContent) {
+          const text = textContent.text as string;
+          // Debug: log the last assistant message text
+          console.log('[ChapterSelector] Checking assistant message:', text.substring(0, 500));
+          console.log('[ChapterSelector] isChapterSelectionText:', isChapterSelectionText(text));
+          
+          if (isChapterSelectionText(text)) {
+            const chapters = parseChapters(text);
+            console.log('[ChapterSelector] Parsed chapters:', chapters);
+            if (chapters.length > 0) {
+              return { text, chapters };
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }, [messages, isRunning]);
+
+  // Handle chapter selection
+  const handleChapterSelection = useCallback((selectedIds: string[]) => {
+    if (!activeSessionId) return;
+    const response = selectedIds.join(", ");
+    // Send as a new user message to continue the conversation
+    sendEvent({
+      type: "session.continue",
+      payload: {
+        sessionId: activeSessionId,
+        prompt: response
+      }
+    });
+  }, [activeSessionId, sendEvent]);
+
+  // Handle AskUserQuestion answer (when SDK doesn't provide proper permission.request)
+  const handleAskUserQuestionAnswer = useCallback((toolUseId: string, answers: Record<string, string>) => {
+    if (!activeSessionId) return;
+    
+    // Format answers as a readable response
+    const response = Object.entries(answers)
+      .map(([q, a]) => `${q}: ${a}`)
+      .join("\n");
+    
+    console.log('[App] AskUserQuestion answered:', toolUseId, answers);
+    
+    // Send as a new user message to continue the conversation
+    sendEvent({
+      type: "session.continue",
+      payload: {
+        sessionId: activeSessionId,
+        prompt: response
+      }
+    });
+  }, [activeSessionId, sendEvent]);
   
   // 判断是否正在加载历史消息
   const isLoadingHistory = activeSession && !activeSession.hydrated;
@@ -175,6 +260,11 @@ function App() {
     resolvePermissionRequest(activeSessionId, toolUseId);
   }, [activeSessionId, sendEvent, resolvePermissionRequest]);
 
+  // Show onboarding wizard for new users
+  if (showOnboarding) {
+    return <OnboardingWizard onComplete={handleOnboardingComplete} />;
+  }
+
   return (
     <div className="flex h-screen bg-surface">
       <Sidebar
@@ -191,6 +281,21 @@ function App() {
           <div className="w-24" /> {/* Spacer for balance */}
           <span className="text-sm font-medium text-ink-700">{activeSession?.title || "Agent Cowork"}</span>
           <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <button
+              onClick={() => setShowSystemInfo(!showSystemInfo)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                showSystemInfo 
+                  ? "bg-accent/10 text-accent" 
+                  : "text-muted hover:bg-surface-tertiary hover:text-ink-700"
+              }`}
+              title={showSystemInfo ? "隐藏系统信息" : "显示系统信息"}
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+              {showSystemInfo ? "隐藏详情" : "显示详情"}
+            </button>
             <button
               onClick={handleOpenMcp}
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-surface-tertiary hover:text-ink-700 transition-colors"
@@ -235,8 +340,8 @@ function App() {
                     message={msg}
                     isLast={idx === messages.length - 1}
                     isRunning={isRunning}
-                    permissionRequest={permissionRequests[0]}
-                    onPermissionResult={handlePermissionResult}
+                    showSystemInfo={showSystemInfo}
+                    onAskUserQuestionAnswer={handleAskUserQuestionAnswer}
                   />
                 );
               })
@@ -265,6 +370,29 @@ function App() {
                 </div>
               )}
             </div>
+
+            {/* Chapter selector - shown when assistant asks to select chapters */}
+            {chapterSelectionInfo && !isRunning && (
+              <ChapterSelector
+                chapters={chapterSelectionInfo.chapters}
+                onSubmit={handleChapterSelection}
+              />
+            )}
+
+            {/* AskUserQuestion panel - shown when there's a pending question */}
+            {(() => {
+              const askUserRequests = permissionRequests.filter(req => req.toolName === "AskUserQuestion");
+              console.log('[App] permissionRequests:', permissionRequests);
+              console.log('[App] AskUserQuestion requests:', askUserRequests);
+              return askUserRequests.map(req => (
+                <div key={req.toolUseId} className="mt-4">
+                  <DecisionPanel
+                    request={req}
+                    onSubmit={(result) => handlePermissionResult(req.toolUseId, result)}
+                  />
+                </div>
+              ));
+            })()}
 
             <div ref={messagesEndRef} />
           </div>
