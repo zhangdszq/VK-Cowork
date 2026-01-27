@@ -25,6 +25,8 @@ type SessionPartialState = {
 
 function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUpRef = useRef(false);
   
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -89,6 +91,8 @@ function App() {
     if (message.event.type === "content_block_start") {
       partialMessagesRef.current.set(sessionId, "");
       updatePartialMessage(sessionId, "", true);
+      // 新的流式输出开始时，重置滚动状态，恢复自动滚动
+      isUserScrolledUpRef.current = false;
     }
 
     if (message.event.type === "content_block_delta") {
@@ -214,9 +218,34 @@ function App() {
     }
   }, [activeSessionId, connected, sessions, historyRequested, markHistoryRequested, sendEvent]);
 
+  // 检测用户是否在底部附近（100px 阈值）
+  const isNearBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return true;
+    const threshold = 100;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  }, []);
+
+  // 监听滚动事件，检测用户是否手动滚动离开底部
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      isUserScrolledUpRef.current = !isNearBottom();
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [isNearBottom]);
+
   // 节流滚动，避免流式输出时频繁触发
+  // 只有在用户没有手动滚动离开底部时才自动滚动
   const scrollTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
+    // 如果用户手动滚动到上方，不要自动滚动
+    if (isUserScrolledUpRef.current) return;
+
     if (scrollTimeoutRef.current) {
       window.clearTimeout(scrollTimeoutRef.current);
     }
@@ -320,7 +349,7 @@ function App() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-8 pb-40 pt-6">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 pb-40 pt-6">
           <div className="mx-auto max-w-3xl">
             {isLoadingHistory ? (
               // 骨架屏 - 加载历史消息时显示
@@ -347,10 +376,10 @@ function App() {
               })
             )}
 
-            {/* Partial message display with skeleton loading */}
-            <div className="partial-message">
-              <MDContent text={partialMessage} />
-              {showPartialMessage && (
+            {/* Partial message display with skeleton loading - only show when streaming is active */}
+            {showPartialMessage && (
+              <div className="partial-message">
+                <MDContent text={partialMessage} />
                 <div className="mt-3 flex flex-col gap-2 px-1">
                   <div className="relative h-3 w-2/12 overflow-hidden rounded-full bg-ink-900/10">
                     <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-ink-900/30 to-transparent animate-shimmer" />
@@ -368,8 +397,8 @@ function App() {
                     <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-ink-900/30 to-transparent animate-shimmer" />
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Chapter selector - shown when assistant asks to select chapters */}
             {chapterSelectionInfo && !isRunning && (

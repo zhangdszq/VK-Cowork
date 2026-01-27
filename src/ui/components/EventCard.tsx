@@ -122,6 +122,20 @@ const isPermissionError = (content: string): boolean => {
   return permissionPatterns.some(pattern => pattern.test(content));
 };
 
+// Check if error is a file size limit error (Claude SDK built-in limit)
+const isFileSizeLimitError = (content: string): boolean => {
+  return /exceeds maximum allowed size/i.test(content);
+};
+
+// Extract file size info from error
+const extractFileSizeInfo = (content: string): { actualSize: string; maxSize: string } | null => {
+  const match = content.match(/\((\d+(?:\.\d+)?KB)\).*?maximum.*?\((\d+KB)\)/i);
+  if (match) {
+    return { actualSize: match[1], maxSize: match[2] };
+  }
+  return null;
+};
+
 // Extract path from permission error
 const extractPathFromError = (content: string): string | null => {
   // Match patterns like "/Users/will/Downloads" or "ls: /path: Operation not permitted"
@@ -167,6 +181,8 @@ const ToolResult = ({ messageContent }: { messageContent: ToolResultContent }) =
   const fullContent = lines.join("\n");
   const hasPermissionError = isPermissionError(fullContent);
   const errorPath = hasPermissionError ? extractPathFromError(fullContent) : null;
+  const hasFileSizeLimitError = isFileSizeLimitError(fullContent);
+  const fileSizeInfo = hasFileSizeLimitError ? extractFileSizeInfo(fullContent) : null;
   
   const isMarkdownContent = isMarkdown(fullContent);
   const hasMoreLines = lines.length > MAX_VISIBLE_LINES;
@@ -252,6 +268,29 @@ const ToolResult = ({ messageContent }: { messageContent: ToolResultContent }) =
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
               <span>已授权，请重新执行任务</span>
+            </div>
+          </div>
+        )}
+        {/* File size limit error - show info message */}
+        {hasFileSizeLimitError && (
+          <div className="mt-3 pt-3 border-t border-ink-900/10">
+            <div className="flex items-start gap-2 text-info text-sm">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+              <div>
+                <span className="font-medium">文件过大</span>
+                {fileSizeInfo && (
+                  <span className="text-ink-500 ml-1">
+                    ({fileSizeInfo.actualSize}，限制 {fileSizeInfo.maxSize})
+                  </span>
+                )}
+                <p className="text-ink-500 mt-1">
+                  Claude SDK 限制单次读取 256KB。AI 会自动使用分段读取或搜索方式处理。
+                </p>
+              </div>
             </div>
           </div>
         )}
