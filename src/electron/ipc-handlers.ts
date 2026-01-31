@@ -6,7 +6,7 @@ import { BrowserWindow } from 'electron';
 import type { ClientEvent, ServerEvent } from './types.js';
 import { SessionStore } from './libs/session-store.js';
 import { runClaude, type RunnerHandle } from './libs/runner.js';
-import { isSidecarRunning } from './libs/sidecar.js';
+import { isEmbeddedApiRunning } from './api/server.js';
 import {
   startSession as apiStartSession,
   continueSession as apiContinueSession,
@@ -61,9 +61,9 @@ function emit(event: ServerEvent) {
   broadcast(event);
 }
 
-// Check if we should use sidecar or direct SDK
-function useSidecar(): boolean {
-  return isSidecarRunning();
+// Check if we should use embedded API or direct SDK
+function useEmbeddedApi(): boolean {
+  return isEmbeddedApiRunning();
 }
 
 export async function handleClientEvent(event: ClientEvent) {
@@ -129,7 +129,7 @@ export async function handleClientEvent(event: ClientEvent) {
       },
     });
 
-    if (useSidecar()) {
+    if (useEmbeddedApi()) {
       // Use sidecar API - it will emit user_prompt
       activeSessions.add(session.id);
       try {
@@ -244,7 +244,7 @@ export async function handleClientEvent(event: ClientEvent) {
       },
     });
 
-    if (useSidecar()) {
+    if (useEmbeddedApi()) {
       // Use sidecar API - it will emit user_prompt
       activeSessions.add(session.id);
       try {
@@ -315,7 +315,7 @@ export async function handleClientEvent(event: ClientEvent) {
     const session = sessions.getSession(event.payload.sessionId);
     if (!session) return;
 
-    if (useSidecar()) {
+    if (useEmbeddedApi()) {
       try {
         await apiStopSession(session.id);
       } catch (error) {
@@ -346,7 +346,7 @@ export async function handleClientEvent(event: ClientEvent) {
   if (event.type === 'session.delete') {
     const sessionId = event.payload.sessionId;
 
-    if (useSidecar()) {
+    if (useEmbeddedApi()) {
       if (activeSessions.has(sessionId)) {
         try {
           await apiStopSession(sessionId);
@@ -372,7 +372,7 @@ export async function handleClientEvent(event: ClientEvent) {
   }
 
   if (event.type === 'permission.response') {
-    if (useSidecar()) {
+    if (useEmbeddedApi()) {
       try {
         await apiSendPermissionResponse(
           event.payload.sessionId,

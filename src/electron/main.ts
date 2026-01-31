@@ -8,7 +8,7 @@ import "./libs/claude-settings.js";
 import { loadUserSettings, saveUserSettings, type UserSettings } from "./libs/user-settings.js";
 import { reloadClaudeSettings } from "./libs/claude-settings.js";
 import { runEnvironmentChecks, validateApiConfig } from "./libs/env-check.js";
-import { startSidecar, stopSidecar, isSidecarAvailable, isSidecarRunning } from "./libs/sidecar.js";
+import { startEmbeddedApi, stopEmbeddedApi, isEmbeddedApiRunning } from "./api/server.js";
 import { 
   loadScheduledTasks, 
   addScheduledTask, 
@@ -24,17 +24,13 @@ import { join } from "path";
 import { homedir } from "os";
 
 app.on("ready", async () => {
-    // Start the API sidecar if available
-    if (isSidecarAvailable()) {
-        console.log("Starting API sidecar...");
-        const started = await startSidecar();
-        if (started) {
-            console.log("API sidecar started successfully");
-        } else {
-            console.warn("Failed to start API sidecar, running in fallback mode");
-        }
+    // Start the embedded API server
+    console.log("Starting embedded API server...");
+    const started = await startEmbeddedApi();
+    if (started) {
+        console.log("Embedded API server started successfully");
     } else {
-        console.log("API sidecar not found, running in fallback mode");
+        console.error("Failed to start embedded API server");
     }
     const mainWindow = new BrowserWindow({
         width: 1200,
@@ -50,8 +46,11 @@ app.on("ready", async () => {
         trafficLightPosition: { x: 15, y: 18 }
     });
 
-    if (isDev()) mainWindow.loadURL(`http://localhost:${DEV_PORT}`)
-    else mainWindow.loadFile(getUIPath());
+    if (isDev()) {
+        mainWindow.loadURL(`http://localhost:${DEV_PORT}`);
+    } else {
+        mainWindow.loadFile(getUIPath());
+    }
 
     pollResources(mainWindow);
 
@@ -409,14 +408,14 @@ app.on("ready", async () => {
         }
     });
 
-    // Check if sidecar is running
+    // Check if embedded API is running
     ipcMainHandle("is-sidecar-running", () => {
-        return isSidecarRunning();
+        return isEmbeddedApiRunning();
     });
 });
 
-// Stop sidecar when app is quitting
+// Stop embedded API when app is quitting
 app.on("will-quit", () => {
-    console.log("Stopping API sidecar...");
-    stopSidecar();
+    console.log("Stopping embedded API server...");
+    stopEmbeddedApi();
 });

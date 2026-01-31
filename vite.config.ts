@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
 		server: {
 			port, // MUST BE LOWERCASE
 			strictPort: true,
+			host: 'localhost',
 		},
 	};
 });

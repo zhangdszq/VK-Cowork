@@ -1,15 +1,15 @@
 /**
- * API client for communicating with the sidecar API server
+ * API client for communicating with the embedded API server
  */
-import { getApiBaseUrl, isSidecarRunning, startSidecar } from './sidecar.js';
+import { getApiBaseUrl, isEmbeddedApiRunning, startEmbeddedApi } from '../api/server.js';
 import type { ServerEvent } from '../types.js';
 
-// Ensure sidecar is running
-async function ensureSidecar(): Promise<void> {
-  if (!isSidecarRunning()) {
-    const started = await startSidecar();
+// Ensure embedded API is running
+async function ensureEmbeddedApi(): Promise<void> {
+  if (!isEmbeddedApiRunning()) {
+    const started = await startEmbeddedApi();
     if (!started) {
-      throw new Error('Failed to start API sidecar');
+      throw new Error('Failed to start embedded API server');
     }
   }
 }
@@ -19,7 +19,7 @@ async function apiFetch(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  await ensureSidecar();
+  await ensureEmbeddedApi();
   
   const url = `${getApiBaseUrl()}${endpoint}`;
   
@@ -100,7 +100,7 @@ export async function startSession(
   },
   onEvent: StreamCallback
 ): Promise<void> {
-  await ensureSidecar();
+  await ensureEmbeddedApi();
 
   const url = `${getApiBaseUrl()}/agent/start`;
   const abortController = new AbortController();
@@ -140,7 +140,7 @@ export async function continueSession(
   onEvent: StreamCallback,
   options?: { cwd?: string; title?: string; externalSessionId?: string }
 ): Promise<void> {
-  await ensureSidecar();
+  await ensureEmbeddedApi();
 
   const url = `${getApiBaseUrl()}/agent/continue`;
   const abortController = new AbortController();
@@ -184,7 +184,7 @@ export async function stopSession(sessionId: string): Promise<void> {
   // First cancel the local SSE stream
   cancelStream(sessionId);
   
-  // Then tell sidecar to stop
+  // Then tell embedded API to stop
   await apiFetch('/agent/stop', {
     method: 'POST',
     body: JSON.stringify({ sessionId }),
