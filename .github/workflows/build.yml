@@ -1,0 +1,147 @@
+name: Build & Release
+
+on:
+  # 推送 tag 时触发（如 v0.0.1）
+  push:
+    tags:
+      - 'v*'
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '是否创建 Release'
+        required: false
+        default: 'false'
+        type: boolean
+
+# 取消正在运行的相同工作流
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14  # Apple Silicon runner
+            platform: mac-arm
+            artifact-name: macos-arm64
+          - os: ubuntu-latest
+            platform: linux
+            artifact-name: linux-x64
+          - os: windows-latest
+            platform: windows
+            artifact-name: windows-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      # 构建 API sidecar
+      - name: Build API sidecar (macOS)
+        if: matrix.platform == 'mac-arm'
+        run: bun run build:api:mac-arm
+
+      - name: Build API sidecar (Linux)
+        if: matrix.platform == 'linux'
+        run: bun run build:api:linux
+
+      - name: Build API sidecar (Windows)
+        if: matrix.platform == 'windows'
+        run: bun run build:api:windows
+
+      # 构建 CLI bundle
+      - name: Build CLI bundle (Unix)
+        if: matrix.platform != 'windows'
+        run: bun run build:cli:${{ matrix.platform }}
+
+      - name: Build CLI bundle (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: bun run build:cli:windows
+
+      # 构建前端和 Electron
+      - name: Build React app
+        run: bun run build
+
+      - name: Transpile Electron
+        run: bun run transpile:electron
+
+      # 打包应用
+      - name: Package (macOS)
+        if: matrix.platform == 'mac-arm'
+        run: npx electron-builder --mac --arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (Linux)
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --linux --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (Windows)
+        if: matrix.platform == 'windows'
+        run: npx electron-builder --win --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 上传构建产物
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.exe
+            dist/*.zip
+          if-no-files-found: warn
+          retention-days: 7
+
+  # 创建 Release（仅在 tag 推送或手动触发选择时）
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.release == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f -name "*"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/*.exe
+            artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
