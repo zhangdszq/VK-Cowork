@@ -117,9 +117,13 @@ export async function startSidecar(): Promise<boolean> {
   // Add CLI bundle path if available
   const cliBundlePath = getCliBundlePath();
   if (existsSync(cliBundlePath)) {
-    const cliPath = join(cliBundlePath, process.platform === 'win32' ? 'claude.cmd' : 'claude');
+    // Use .mjs file so SDK will use node to execute it (works on all platforms)
+    const cliPath = join(cliBundlePath, 'claude.mjs');
     if (existsSync(cliPath)) {
       env.CLAUDE_CLI_PATH = cliPath;
+      // Add cli-bundle to PATH so node.exe can be found
+      const pathSeparator = process.platform === 'win32' ? ';' : ':';
+      env.PATH = cliBundlePath + pathSeparator + (env.PATH || '');
     }
   }
 

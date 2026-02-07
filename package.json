@@ -19,7 +19,7 @@
     "build:cli:mac-arm": "./scripts/bundle-cli.sh mac-arm",
     "build:cli:mac-intel": "./scripts/bundle-cli.sh mac-intel",
     "build:cli:linux": "./scripts/bundle-cli.sh linux",
-    "build:cli:windows": "./scripts/bundle-cli.sh windows",
+    "build:cli:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/bundle-cli.ps1 windows",
     "lint": "eslint .",
     "preview": "vite preview",
     "transpile:electron": "tsc --project src/electron/tsconfig.json",

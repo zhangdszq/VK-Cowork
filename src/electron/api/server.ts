@@ -72,6 +72,24 @@ export async function startEmbeddedApi(port: number = DEFAULT_PORT): Promise<boo
     const dataDir = electronApp.getPath('userData');
     await initSessionStore(dataDir);
 
+    // Set up bundled CLI path for packaged app
+    if (electronApp.isPackaged) {
+      const { join } = await import('path');
+      const { existsSync } = await import('fs');
+      const cliBundlePath = join(process.resourcesPath, 'cli-bundle');
+      const cliMjsPath = join(cliBundlePath, 'claude.mjs');
+      
+      if (existsSync(cliMjsPath)) {
+        process.env.CLAUDE_CLI_PATH = cliMjsPath;
+        // Add cli-bundle to PATH so node.exe can be found
+        const pathSeparator = process.platform === 'win32' ? ';' : ':';
+        process.env.PATH = cliBundlePath + pathSeparator + (process.env.PATH || '');
+        console.log('[API] Bundled CLI path set:', cliMjsPath);
+      } else {
+        console.warn('[API] Bundled CLI not found at:', cliMjsPath);
+      }
+    }
+
     // Apply user settings to environment
     try {
       const { loadUserSettings } = await import('../libs/user-settings.js');

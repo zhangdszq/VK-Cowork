@@ -90,6 +90,15 @@ function getEnhancedEnv(): Record<string, string | undefined> {
     ];
   }
 
+  // Add cli-bundle directory to PATH if CLAUDE_CLI_PATH is set
+  const cliPath = process.env.CLAUDE_CLI_PATH;
+  if (cliPath) {
+    const cliBundleDir = join(cliPath, '..');
+    if (existsSync(cliBundleDir)) {
+      additionalPaths.unshift(cliBundleDir);
+    }
+  }
+
   const pathSeparator = process.platform === 'win32' ? ';' : ':';
   const currentPath = process.env.PATH || '';
   const newPath = [...additionalPaths, currentPath].join(pathSeparator);
@@ -125,9 +134,6 @@ function getEnhancedEnv(): Record<string, string | undefined> {
   };
 }
 
-const claudeCodePath = getClaudeCodePath();
-const enhancedEnv = getEnhancedEnv();
-
 // Stop a session by ID (supports both internal and external IDs)
 export function stopSession(sessionId: string): boolean {
   console.log('[Runner] Stopping session:', sessionId);
@@ -158,6 +164,10 @@ export async function* runClaude(options: RunnerOptions): AsyncGenerator<ServerE
 
   // Queue for permission requests that need to be yielded
   const permissionRequestQueue: ServerEvent[] = [];
+
+  // Get CLI path and environment dynamically (env vars are set after module load)
+  const claudeCodePath = getClaudeCodePath();
+  const enhancedEnv = getEnhancedEnv();
 
   console.log('[Runner] Starting Claude query:', { prompt: prompt.slice(0, 50), cwd: session.cwd ?? DEFAULT_CWD, resume: resumeSessionId });
   console.log('[Runner] Claude Code path:', claudeCodePath);
@@ -340,6 +350,10 @@ export async function* runClaude(options: RunnerOptions): AsyncGenerator<ServerE
 // Generate session title using Claude
 export async function generateSessionTitle(userIntent: string | null): Promise<string> {
   if (!userIntent) return 'New Session';
+
+  // Get CLI path and environment dynamically
+  const claudeCodePath = getClaudeCodePath();
+  const enhancedEnv = getEnhancedEnv();
 
   try {
     const result: SDKResultMessage = await unstable_v2_prompt(
