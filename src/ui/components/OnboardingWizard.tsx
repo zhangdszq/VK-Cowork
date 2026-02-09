@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-type WizardStep = "welcome" | "api" | "complete";
+type WizardStep = "welcome" | "api" | "codex" | "complete";
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -10,7 +10,8 @@ interface OnboardingWizardProps {
 function StepIndicator({ currentStep }: { currentStep: WizardStep }) {
   const steps = [
     { id: "welcome", label: "欢迎" },
-    { id: "api", label: "配置" },
+    { id: "api", label: "Claude" },
+    { id: "codex", label: "Codex" },
     { id: "complete", label: "完成" },
   ];
   
@@ -58,6 +59,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Codex auth state
+  const [codexLoggedIn, setCodexLoggedIn] = useState(false);
+  const [codexEmail, setCodexEmail] = useState<string | undefined>();
+  const [codexLoggingIn, setCodexLoggingIn] = useState(false);
+  const [codexError, setCodexError] = useState<string | null>(null);
+
   // Save API config
   const handleSaveApi = useCallback(async () => {
     setValidationError(null);
@@ -87,15 +94,39 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       });
 
       setValidating(false);
-      setStep("complete");
+      setStep("codex");
     } catch (error) {
       setValidationError("验证失败: " + (error instanceof Error ? error.message : String(error)));
       setValidating(false);
     }
   }, [baseUrl, authToken]);
 
-  // Skip API config (user may configure later)
+  // Skip API config
   const handleSkipApi = useCallback(() => {
+    setStep("codex");
+  }, []);
+
+  // Codex login
+  const handleCodexLogin = useCallback(async () => {
+    setCodexLoggingIn(true);
+    setCodexError(null);
+    try {
+      const result = await window.electron.openaiLogin();
+      if (result.success) {
+        setCodexLoggedIn(true);
+        setCodexEmail(result.email);
+      } else {
+        setCodexError(result.error || "登录失败");
+      }
+    } catch (err) {
+      setCodexError("登录过程出错: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setCodexLoggingIn(false);
+    }
+  }, []);
+
+  // Skip Codex config
+  const handleSkipCodex = useCallback(() => {
     setStep("complete");
   }, []);
 
@@ -228,6 +259,101 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             </div>
           )}
 
+          {/* Codex Auth Step */}
+          {step === "codex" && (
+            <div className="p-8">
+              <div className="flex justify-center mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" className="h-7 w-7 text-emerald-600" fill="currentColor">
+                    <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
+                  </svg>
+                </div>
+              </div>
+              <h2 className="text-xl font-semibold text-ink-900 text-center mb-2">授权 OpenAI Codex</h2>
+              <p className="text-sm text-muted text-center mb-6">
+                使用 ChatGPT 账号登录，即可使用 Codex 模型（gpt-5.3-codex）
+              </p>
+
+              {codexLoggedIn ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-success/20 bg-success/5 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10">
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-success" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M5 12l4 4L19 6" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-ink-800">已登录 OpenAI</p>
+                        {codexEmail && (
+                          <p className="text-xs text-muted truncate">{codexEmail}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setStep("complete")}
+                    className="w-full rounded-xl bg-accent px-4 py-3 text-sm font-medium text-white shadow-soft hover:bg-accent-hover transition-colors"
+                  >
+                    继续
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-ink-900/10 bg-surface-secondary p-4">
+                    <p className="text-xs text-muted leading-relaxed">
+                      通过 ChatGPT 账号 OAuth 授权登录，使用 Plus/Pro 订阅额度访问 Codex 模型，无需额外 API 费用。
+                    </p>
+                  </div>
+
+                  {codexError && (
+                    <div className="rounded-xl border border-error/20 bg-error/5 p-3">
+                      <p className="text-xs text-error flex items-start gap-2">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                        <span>{codexError}</span>
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleCodexLogin}
+                    disabled={codexLoggingIn}
+                    className="w-full rounded-xl bg-[#10a37f] px-4 py-3 text-sm font-medium text-white shadow-soft hover:bg-[#0d8c6d] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {codexLoggingIn ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                          <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                        正在打开登录窗口...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                          <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
+                        </svg>
+                        使用 ChatGPT 登录
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleSkipCodex}
+                    disabled={codexLoggingIn}
+                    className="w-full rounded-xl border border-ink-900/10 bg-surface px-4 py-3 text-sm text-muted hover:bg-surface-tertiary hover:text-ink-700 transition-colors disabled:opacity-50"
+                  >
+                    稍后配置
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Complete Step */}
           {step === "complete" && (
             <div className="p-8 text-center">
@@ -240,7 +366,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               <h2 className="text-2xl font-bold text-ink-900 mb-3">准备就绪！</h2>
               <p className="text-muted mb-8 leading-relaxed">
                 配置已保存，现在可以开始使用了。<br />
-                您可以随时在设置中修改 API 配置。
+                您可以随时在设置中修改配置。
               </p>
               <button
                 onClick={onComplete}
