@@ -24,7 +24,8 @@
             },
             {
                 "from": "cli-bundle",
-                "to": "cli-bundle"
+                "to": "cli-bundle",
+                "filter": ["**/*", "!.git"]
             }
         ]
     },
@@ -38,7 +39,8 @@
             },
             {
                 "from": "cli-bundle",
-                "to": "cli-bundle"
+                "to": "cli-bundle",
+                "filter": ["**/*", "!.git"]
             }
         ]
     },

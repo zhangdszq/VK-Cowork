@@ -224,6 +224,17 @@ if [ -n "$TARGET_TRIPLE" ]; then
   log_info "Created launcher: claude-$TARGET_TRIPLE"
 fi
 
+# Create claude.mjs for SDK compatibility (SDK uses node to execute .mjs files)
+log_info "Creating claude.mjs for SDK compatibility..."
+cat > "$OUTPUT_DIR/claude.mjs" << 'MJS_EOF'
+#!/usr/bin/env node
+// Wrapper script for Claude Code CLI
+// This file exists so the SDK will use node to execute it
+import './node_modules/@anthropic-ai/claude-code/cli.js';
+MJS_EOF
+chmod +x "$OUTPUT_DIR/claude.mjs"
+log_info "Created claude.mjs"
+
 # Report bundle size
 BUNDLE_SIZE=$(du -sh "$OUTPUT_DIR" 2>/dev/null | cut -f1)
 log_info "CLI bundle completed!"
