@@ -104,6 +104,7 @@ function SkillIcon({ type, className = "" }: { type: string; className?: string 
 
 interface PromptInputProps {
   sendEvent: (event: ClientEvent) => void;
+  sidebarWidth: number;
 }
 
 export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
@@ -116,6 +117,8 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
   const setGlobalError = useAppStore((state) => state.setGlobalError);
   const provider = useAppStore((state) => state.provider);
   const codexModel = useAppStore((state) => state.codexModel);
+  const selectedAssistantId = useAppStore((state) => state.selectedAssistantId);
+  const selectedAssistantSkillNames = useAppStore((state) => state.selectedAssistantSkillNames);
 
   // Image attachment - only store path, Agent will use built-in analyze_image tool
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -198,8 +201,11 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
     // Determine if we need a new session:
     // 1. No active session
     // 2. Active session's provider differs from selected provider
+    // 3. Active session's assistant differs from selected assistant
     const activeProvider = activeSession?.provider ?? "claude";
-    const needNewSession = !activeSessionId || (activeProvider !== provider);
+    const activeAssistantId = activeSession?.assistantId;
+    const assistantChanged = Boolean(selectedAssistantId) && activeAssistantId !== selectedAssistantId;
+    const needNewSession = !activeSessionId || (activeProvider !== provider) || assistantChanged;
 
     if (needNewSession) {
       let title = "";
@@ -221,6 +227,8 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
           allowedTools: DEFAULT_ALLOWED_TOOLS,
           provider,
           ...(provider === "codex" ? { model: codexModel } : {}),
+          ...(selectedAssistantId ? { assistantId: selectedAssistantId } : {}),
+          ...(selectedAssistantSkillNames.length > 0 ? { assistantSkillNames: selectedAssistantSkillNames } : {}),
         }
       });
     } else {
@@ -231,7 +239,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
       sendEvent({ type: "session.continue", payload: { sessionId: activeSessionId, prompt: finalPrompt } });
     }
     setPrompt("");
-  }, [activeSession, activeSessionId, cwd, imagePath, prompt, provider, codexModel, sendEvent, setGlobalError, setPendingStart, setPrompt]);
+  }, [activeSession, activeSessionId, cwd, imagePath, prompt, provider, codexModel, selectedAssistantId, selectedAssistantSkillNames, sendEvent, setGlobalError, setPendingStart, setPrompt]);
 
   const handleStop = useCallback(() => {
     if (!activeSessionId) return;
@@ -266,6 +274,8 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
           allowedTools: DEFAULT_ALLOWED_TOOLS,
           provider,
           ...(provider === "codex" ? { model: codexModel } : {}),
+          ...(selectedAssistantId ? { assistantId: selectedAssistantId } : {}),
+          ...(selectedAssistantSkillNames.length > 0 ? { assistantSkillNames: selectedAssistantSkillNames } : {}),
         }
       });
       return;
@@ -273,7 +283,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
     
     // Otherwise use normal flow
     handleSend();
-  }, [cwd, prompt, handleSend, sendEvent, setGlobalError, setPendingStart]);
+  }, [cwd, prompt, handleSend, sendEvent, setGlobalError, setPendingStart, provider, codexModel, selectedAssistantId, selectedAssistantSkillNames]);
 
   return { 
     prompt, 
@@ -289,7 +299,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
   };
 }
 
-export function PromptInput({ sendEvent }: PromptInputProps) {
+export function PromptInput({ sendEvent, sidebarWidth }: PromptInputProps) {
   const { 
     prompt, 
     setPrompt, 
@@ -310,10 +320,18 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
   const [skillFilter, setSkillFilter] = useState("");
   const skillListRef = useRef<HTMLDivElement | null>(null);
 
-  // Load skills on mount
+  // Memory indicator state
+  const [memorySummary, setMemorySummary] = useState<{ longTermSize: number; dailyCount: number; totalSize: number } | null>(null);
+  const [showMemoryTooltip, setShowMemoryTooltip] = useState(false);
+
+  // Load skills and memory summary on mount
   useEffect(() => {
     window.electron.getClaudeConfig().then((config) => {
       setSkills(config.skills);
+    }).catch(console.error);
+    // Load memory summary
+    window.electron.memoryList().then((list) => {
+      setMemorySummary(list.summary);
     }).catch(console.error);
   }, []);
 
@@ -447,7 +465,10 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
   const imageFileName = imagePath ? imagePath.split("/").pop() : null;
 
   return (
-    <section className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-surface via-surface to-transparent pb-6 px-2 lg:pb-8 pt-8 lg:ml-[280px]">
+    <section
+      className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-surface via-surface to-transparent pb-6 px-2 lg:pb-8 pt-8"
+      style={{ marginLeft: `${sidebarWidth}px` }}
+    >
       <div className="mx-auto w-full max-w-full lg:max-w-3xl relative">
         {/* Skills Selector Dropdown */}
         {showSkills && (
@@ -565,6 +586,34 @@ export function PromptInput({ sendEvent }: PromptInputProps) {
         
         {/* Input Area */}
         <div className="flex w-full items-end gap-3 rounded-2xl border border-ink-900/10 bg-surface px-4 py-3 shadow-card">
+          {/* Memory Indicator */}
+          {memorySummary && memorySummary.totalSize > 0 && (
+            <div
+              className="relative flex h-9 shrink-0 items-center"
+              onMouseEnter={() => setShowMemoryTooltip(true)}
+              onMouseLeave={() => setShowMemoryTooltip(false)}
+            >
+              <div className="flex items-center gap-1 rounded-full border border-accent/20 bg-accent/5 px-2 py-1 text-accent">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+                  <path d="M12 6v6l4 2" />
+                </svg>
+                <span className="text-[10px] font-medium">记忆</span>
+              </div>
+              {showMemoryTooltip && (
+                <div className="absolute bottom-full left-0 mb-2 w-48 rounded-xl border border-ink-900/10 bg-surface p-3 shadow-elevated z-50">
+                  <p className="text-xs font-medium text-ink-800 mb-1.5">记忆系统已激活</p>
+                  <div className="grid gap-1 text-[11px] text-muted">
+                    <span>长期记忆: {memorySummary.longTermSize > 0 ? `${(memorySummary.longTermSize / 1024).toFixed(1)} KB` : "空"}</span>
+                    <span>每日记忆: {memorySummary.dailyCount} 天</span>
+                    <span>总计: {(memorySummary.totalSize / 1024).toFixed(1)} KB</span>
+                  </div>
+                  <p className="text-[10px] text-muted-light mt-1.5">新会话启动时自动注入</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Image Upload Button */}
           <button
             onClick={handleSelectImage}

@@ -41,6 +41,8 @@ electron.contextBridge.exposeInMainWorld("electron", {
         ipcInvoke("request-folder-access", folderPath),
     openPrivacySettings: () => 
         ipcInvoke("open-privacy-settings"),
+    openPath: (targetPath: string) => 
+        ipcInvoke("open-path", targetPath),
     installClaudeCLI: () => 
         ipcInvoke("install-claude-cli"),
     isClaudeCLIInstalled: () => 
@@ -69,6 +71,12 @@ electron.contextBridge.exposeInMainWorld("electron", {
         ipcInvoke("delete-mcp-server", name),
     readSkillContent: (skillPath: string) => 
         ipcInvoke("read-skill-content", skillPath),
+    installSkill: (url: string) => 
+        ipcInvoke("install-skill", url),
+    getAssistantsConfig: () =>
+        ipcInvoke("get-assistants-config"),
+    saveAssistantsConfig: (config: AssistantsConfig) =>
+        ipcInvoke("save-assistants-config", config),
     // OpenAI Codex OAuth
     openaiLogin: () => 
         ipcInvoke("openai-login"),
@@ -76,6 +84,13 @@ electron.contextBridge.exposeInMainWorld("electron", {
         ipcInvoke("openai-logout"),
     openaiAuthStatus: () => 
         ipcInvoke("openai-auth-status"),
+    // Memory
+    memoryRead: (target: string, date?: string) => 
+        ipcInvoke("memory-read", target, date),
+    memoryWrite: (target: string, content: string, date?: string) => 
+        ipcInvoke("memory-write", target, content, date),
+    memoryList: () => 
+        ipcInvoke("memory-list"),
     // Scheduler
     getScheduledTasks: () => 
         ipcInvoke("get-scheduled-tasks"),

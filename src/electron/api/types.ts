@@ -24,6 +24,8 @@ export type Session = {
   lastPrompt?: string;
   provider?: AgentProvider;
   model?: string;
+  assistantId?: string;
+  assistantSkillNames?: string[];
   pendingPermissions: Map<string, PendingPermission>;
   abortController?: AbortController;
   createdAt: number;
@@ -38,6 +40,8 @@ export type StoredSession = {
   allowedTools?: string;
   lastPrompt?: string;
   claudeSessionId?: string;
+  assistantId?: string;
+  assistantSkillNames?: string[];
   createdAt: number;
   updatedAt: number;
 };

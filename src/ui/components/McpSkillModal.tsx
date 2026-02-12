@@ -113,6 +113,12 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Install skill state
+  const [showInstallForm, setShowInstallForm] = useState(false);
+  const [installUrl, setInstallUrl] = useState("");
+  const [installing, setInstalling] = useState(false);
+  const [installResult, setInstallResult] = useState<{ success: boolean; message: string } | null>(null);
+
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
@@ -152,6 +158,25 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
       loadConfig();
     }
     return result;
+  };
+
+  const handleInstallSkill = async () => {
+    const url = installUrl.trim();
+    if (!url) return;
+    setInstalling(true);
+    setInstallResult(null);
+    try {
+      const result = await window.electron.installSkill(url);
+      setInstallResult({ success: result.success, message: result.message });
+      if (result.success) {
+        setInstallUrl("");
+        loadConfig();
+      }
+    } catch (err) {
+      setInstallResult({ success: false, message: String(err) });
+    } finally {
+      setInstalling(false);
+    }
   };
 
   // Group skills by category
@@ -217,7 +242,23 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
                 <Dialog.Title className="text-xl font-semibold text-ink-800">
                   🛒 Skill Marketplace
                 </Dialog.Title>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  {/* Install Skill Button */}
+                  <button
+                    onClick={() => { setShowInstallForm(!showInstallForm); setInstallResult(null); }}
+                    className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                      showInstallForm
+                        ? "bg-accent text-white"
+                        : "border border-ink-900/10 bg-surface-secondary text-ink-700 hover:bg-surface-tertiary"
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    安装技能
+                  </button>
                   {/* Search */}
                   <div className="relative">
                     <svg viewBox="0 0 24 24" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" fill="none" stroke="currentColor" strokeWidth="2">
@@ -244,6 +285,56 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
                   </Dialog.Close>
                 </div>
               </div>
+
+              {/* Install Skill Form */}
+              {showInstallForm && (
+                <div className="px-6 py-3 border-b border-ink-900/10 bg-surface-secondary/50">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 relative">
+                      <svg viewBox="0 0 24 24" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="输入 Git 仓库地址，如 https://github.com/user/skill-name"
+                        value={installUrl}
+                        onChange={(e) => setInstallUrl(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleInstallSkill(); }}
+                        className="w-full rounded-xl border border-ink-900/10 bg-surface pl-10 pr-4 py-2.5 text-sm text-ink-800 font-mono placeholder:text-muted-light focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20 transition-colors"
+                        disabled={installing}
+                      />
+                    </div>
+                    <button
+                      onClick={handleInstallSkill}
+                      disabled={installing || !installUrl.trim()}
+                      className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-accent-hover transition-colors disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
+                    >
+                      {installing ? (
+                        <span className="flex items-center gap-2">
+                          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                          安装中...
+                        </span>
+                      ) : "安装"}
+                    </button>
+                  </div>
+                  {installResult && (
+                    <div className={`mt-2 rounded-xl border p-2.5 text-xs font-mono whitespace-pre-wrap ${
+                      installResult.success
+                        ? "border-success/20 bg-success/5 text-success"
+                        : "border-error/20 bg-error/5 text-error"
+                    }`}>
+                      {installResult.message}
+                    </div>
+                  )}
+                  <p className="mt-2 text-[11px] text-muted-light">
+                    技能将同时安装到 ~/.claude/skills/ 和 ~/.codex/skills/
+                  </p>
+                </div>
+              )}
 
               <div className="flex flex-1 overflow-hidden">
                 {/* Category Sidebar */}

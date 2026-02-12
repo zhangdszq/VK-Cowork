@@ -6,10 +6,16 @@ import { handleClientEvent, sessions } from "./ipc-handlers.js";
 import type { ClientEvent } from "./types.js";
 import "./libs/claude-settings.js";
 import { loadUserSettings, saveUserSettings, type UserSettings } from "./libs/user-settings.js";
+import { loadAssistantsConfig, saveAssistantsConfig, type AssistantsConfig } from "./libs/assistants-config.js";
 import { reloadClaudeSettings } from "./libs/claude-settings.js";
 import { runEnvironmentChecks, validateApiConfig } from "./libs/env-check.js";
 import { openAILogin, openAILogout, getOpenAIAuthStatus, ensureCodexAuthSync } from "./libs/openai-auth.js";
 import { startEmbeddedApi, stopEmbeddedApi, isEmbeddedApiRunning } from "./api/server.js";
+import {
+  readLongTermMemory, readDailyMemory, buildMemoryContext,
+  writeLongTermMemory, appendDailyMemory, writeDailyMemory,
+  listDailyMemories, getMemoryDir, getMemorySummary,
+} from "./libs/memory-store.js";
 import { 
   loadScheduledTasks, 
   addScheduledTask, 
@@ -112,6 +118,14 @@ app.on("ready", async () => {
         return true;
     });
 
+    ipcMainHandle("get-assistants-config", () => {
+        return loadAssistantsConfig();
+    });
+
+    ipcMainHandle("save-assistants-config", (_: any, config: AssistantsConfig) => {
+        return saveAssistantsConfig(config);
+    });
+
     // Scheduler handlers
     ipcMainHandle("get-scheduled-tasks", () => {
         return loadScheduledTasks();
@@ -153,6 +167,29 @@ app.on("ready", async () => {
         return getOpenAIAuthStatus();
     });
 
+    // Memory system
+    ipcMainHandle("memory-read", (_: any, target: string, date?: string) => {
+        if (target === "long-term") return { content: readLongTermMemory() };
+        if (target === "daily") return { content: readDailyMemory(date ?? new Date().toISOString().slice(0, 10)) };
+        if (target === "context") return { content: buildMemoryContext() };
+        return { content: "", memoryDir: getMemoryDir() };
+    });
+
+    ipcMainHandle("memory-write", (_: any, target: string, content: string, date?: string) => {
+        if (target === "long-term") { writeLongTermMemory(content); return { success: true }; }
+        if (target === "daily-append") { appendDailyMemory(content, date); return { success: true }; }
+        if (target === "daily") { writeDailyMemory(content, date ?? new Date().toISOString().slice(0, 10)); return { success: true }; }
+        return { success: false, error: "Unknown target" };
+    });
+
+    ipcMainHandle("memory-list", () => {
+        return {
+            memoryDir: getMemoryDir(),
+            summary: getMemorySummary(),
+            dailies: listDailyMemories(),
+        };
+    });
+
     // Request folder access permission (macOS)
     // This opens a dialog for the user to select a folder, which grants access
     ipcMainHandle("request-folder-access", async (_: any, folderPath?: string) => {
@@ -186,6 +223,19 @@ app.on("ready", async () => {
         return false;
     });
 
+    // Open a path in the system file manager
+    ipcMainHandle("open-path", async (_: any, targetPath: string) => {
+        console.log("[open-path] Opening:", targetPath);
+        if (!existsSync(targetPath)) {
+            mkdirSync(targetPath, { recursive: true });
+        }
+        const err = await shell.openPath(targetPath);
+        if (err) {
+            console.error("[open-path] Failed:", err);
+            return false;
+        }
+        return true;
+    });
 
     // Handle image selection (returns path only, Agent will use built-in analyze_image tool)
     ipcMainHandle("select-image", async () => {
@@ -427,6 +477,46 @@ app.on("ready", async () => {
             console.error("Failed to read skill content:", error);
             return null;
         }
+    });
+
+    // Install skill from git URL into both ~/.claude/skills/ and ~/.codex/skills/
+    ipcMainHandle("install-skill", async (_: any, url: string) => {
+        const { execSync } = await import("child_process");
+        const home = homedir();
+
+        // Derive skill name from URL: last path segment without .git
+        const urlClean = url.replace(/\.git\/?$/, "").replace(/\/+$/, "");
+        const skillName = urlClean.split("/").pop() || "unknown-skill";
+
+        const targets = [
+            join(home, ".claude", "skills", skillName),
+            join(home, ".codex", "skills", skillName),
+        ];
+
+        const results: string[] = [];
+
+        for (const targetDir of targets) {
+            try {
+                if (existsSync(targetDir)) {
+                    // Already exists — pull latest
+                    execSync("git pull", { cwd: targetDir, timeout: 30000, stdio: "pipe" });
+                    results.push(`更新: ${targetDir}`);
+                } else {
+                    // Ensure parent exists
+                    const parentDir = join(targetDir, "..");
+                    if (!existsSync(parentDir)) {
+                        mkdirSync(parentDir, { recursive: true });
+                    }
+                    execSync(`git clone ${url} ${JSON.stringify(targetDir)}`, { timeout: 60000, stdio: "pipe" });
+                    results.push(`安装: ${targetDir}`);
+                }
+            } catch (err) {
+                results.push(`失败 (${targetDir}): ${(err as Error).message}`);
+            }
+        }
+
+        console.log("[install-skill]", results);
+        return { success: true, skillName, message: results.join("\n") };
     });
 
     // Check if embedded API is running

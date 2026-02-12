@@ -7,7 +7,7 @@ interface SettingsModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type TabValue = "api" | "proxy" | "openai";
+type TabValue = "api" | "proxy" | "openai" | "memory";
 
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<TabValue>("api");
@@ -27,6 +27,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [openaiExpiresAt, setOpenaiExpiresAt] = useState<number | undefined>();
   const [openaiLoggingIn, setOpenaiLoggingIn] = useState(false);
   const [openaiError, setOpenaiError] = useState<string | null>(null);
+
+  // Memory state
+  const [memoryDir, setMemoryDir] = useState("");
   
   // UI state
   const [saving, setSaving] = useState(false);
@@ -46,6 +49,15 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     }
   };
 
+  const loadMemoryDir = async () => {
+    try {
+      const list = await window.electron.memoryList();
+      setMemoryDir(list.memoryDir);
+    } catch {
+      // Ignore
+    }
+  };
+
   useEffect(() => {
     if (open) {
       window.electron.getUserSettings().then((settings) => {
@@ -57,6 +69,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         setValidationError(null);
       });
       loadOpenAIStatus();
+      loadMemoryDir();
       setOpenaiError(null);
     }
   }, [open]);
@@ -171,6 +184,12 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                 className="px-4 py-2 text-sm font-medium text-muted hover:text-ink-700 border-b-2 border-transparent data-[state=active]:text-accent data-[state=active]:border-accent transition-colors"
               >
                 OpenAI Codex
+              </Tabs.Trigger>
+              <Tabs.Trigger
+                value="memory"
+                className="px-4 py-2 text-sm font-medium text-muted hover:text-ink-700 border-b-2 border-transparent data-[state=active]:text-accent data-[state=active]:border-accent transition-colors"
+              >
+                记忆
               </Tabs.Trigger>
             </Tabs.List>
 
@@ -432,10 +451,59 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                 </div>
               )}
             </Tabs.Content>
+
+            {/* Memory Tab */}
+            <Tabs.Content value="memory" className="outline-none">
+              <p className="text-sm text-muted mb-4">
+                Agent 在新会话启动时会自动加载记忆，并在对话中主动记录重要信息
+              </p>
+
+              <div className="grid gap-4">
+                <div className="rounded-xl border border-ink-900/10 bg-surface-secondary p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
+                      <svg viewBox="0 0 24 24" className="h-5 w-5 text-accent" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink-800">记忆目录</p>
+                      {memoryDir && (
+                        <p className="text-[11px] text-muted-light font-mono truncate">{memoryDir}</p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      let dir = memoryDir;
+                      if (!dir) {
+                        try {
+                          const list = await window.electron.memoryList();
+                          dir = list.memoryDir;
+                          setMemoryDir(dir);
+                        } catch { return; }
+                      }
+                      if (dir) window.electron.openPath(dir);
+                    }}
+                    className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-accent-hover transition-colors"
+                  >
+                    打开记忆目录
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-info/20 bg-info/5 p-3">
+                  <p className="text-xs text-info leading-relaxed">
+                    <strong>说明：</strong>记忆目录包含 MEMORY.md（长期记忆）和 daily/ 文件夹（每日记忆），
+                    可直接用编辑器查看和修改。
+                  </p>
+                </div>
+              </div>
+            </Tabs.Content>
           </Tabs.Root>
 
-          {/* Validation Error */}
-          {validationError && (
+          {/* Validation Error (for API/Proxy tabs) */}
+          {validationError && activeTab !== "memory" && activeTab !== "openai" && (
             <div className="mt-4 rounded-xl border border-error/20 bg-error/5 p-3">
               <p className="text-xs text-error flex items-start gap-2">
                 <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -448,48 +516,50 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             </div>
           )}
 
-          {/* Save Button */}
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={validating || saving}
-              className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-accent-hover transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {validating ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg aria-hidden="true" className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                  验证中...
-                </span>
-              ) : saving ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg aria-hidden="true" className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                  保存中...
-                </span>
-              ) : saved ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M5 12l4 4L19 6" />
-                  </svg>
-                  已保存
-                </span>
-              ) : (
-                "保存设置"
-              )}
-            </button>
-          </div>
+          {/* Save Button (only for API/Proxy tabs) */}
+          {(activeTab === "api" || activeTab === "proxy") && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={validating || saving}
+                className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-accent-hover transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {validating ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg aria-hidden="true" className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    验证中...
+                  </span>
+                ) : saving ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg aria-hidden="true" className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    保存中...
+                  </span>
+                ) : saved ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M5 12l4 4L19 6" />
+                    </svg>
+                    已保存
+                  </span>
+                ) : (
+                  "保存设置"
+                )}
+              </button>
 
-          <div className="mt-4 rounded-xl border border-info/20 bg-info/5 p-3">
-            <p className="text-xs text-info">
-              <strong>注意：</strong>这里的设置优先于环境变量。修改后对新会话生效。
-            </p>
-          </div>
+              <div className="mt-4 rounded-xl border border-info/20 bg-info/5 p-3">
+                <p className="text-xs text-info">
+                  <strong>注意：</strong>这里的设置优先于环境变量。修改后对新会话生效。
+                </p>
+              </div>
+            </div>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

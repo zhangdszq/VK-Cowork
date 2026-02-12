@@ -105,6 +105,19 @@ type SkillInfo = {
     description?: string;
 }
 
+type AssistantConfig = {
+    id: string;
+    name: string;
+    provider: "claude" | "codex";
+    model?: string;
+    skillNames?: string[];
+}
+
+type AssistantsConfig = {
+    assistants: AssistantConfig[];
+    defaultAssistantId?: string;
+}
+
 type ClaudeConfigInfo = {
     mcpServers: McpServer[];
     skills: SkillInfo[];
@@ -113,6 +126,32 @@ type ClaudeConfigInfo = {
 type SaveMcpResult = {
     success: boolean;
     message: string;
+}
+
+type MemoryReadResult = {
+    content: string;
+    memoryDir?: string;
+}
+
+type MemoryWriteResult = {
+    success: boolean;
+    error?: string;
+}
+
+type MemoryFileInfo = {
+    date: string;
+    path: string;
+    size: number;
+}
+
+type MemoryListResult = {
+    memoryDir: string;
+    summary: {
+        longTermSize: number;
+        dailyCount: number;
+        totalSize: number;
+    };
+    dailies: MemoryFileInfo[];
 }
 
 type UnsubscribeFunction = () => void;
@@ -129,6 +168,7 @@ type EventPayloadMapping = {
     "validate-api-config": ValidateApiResult;
     "request-folder-access": FolderAccessResult;
     "open-privacy-settings": boolean;
+    "open-path": boolean;
     "install-claude-cli": InstallResult;
     "is-claude-cli-installed": boolean;
     "select-image": string | null;
@@ -139,11 +179,18 @@ type EventPayloadMapping = {
     "save-mcp-server": SaveMcpResult;
     "delete-mcp-server": SaveMcpResult;
     "read-skill-content": string | null;
+    "install-skill": { success: boolean; skillName: string; message: string };
+    "get-assistants-config": AssistantsConfig;
+    "save-assistants-config": AssistantsConfig;
     "is-sidecar-running": boolean;
     // OpenAI Codex OAuth
     "openai-login": OpenAILoginResult;
     "openai-logout": { success: boolean };
     "openai-auth-status": OpenAIAuthStatus;
+    // Memory
+    "memory-read": MemoryReadResult;
+    "memory-write": MemoryWriteResult;
+    "memory-list": MemoryListResult;
     // Scheduler
     "get-scheduled-tasks": ScheduledTask[];
     "add-scheduled-task": ScheduledTask;
@@ -167,6 +214,7 @@ interface Window {
         validateApiConfig: (baseUrl?: string, authToken?: string) => Promise<ValidateApiResult>;
         requestFolderAccess: (folderPath?: string) => Promise<FolderAccessResult>;
         openPrivacySettings: () => Promise<boolean>;
+        openPath: (targetPath: string) => Promise<boolean>;
         installClaudeCLI: () => Promise<InstallResult>;
         isClaudeCLIInstalled: () => Promise<boolean>;
         onInstallProgress: (callback: (message: string) => void) => UnsubscribeFunction;
@@ -181,10 +229,17 @@ interface Window {
         saveMcpServer: (server: McpServer) => Promise<SaveMcpResult>;
         deleteMcpServer: (name: string) => Promise<SaveMcpResult>;
         readSkillContent: (skillPath: string) => Promise<string | null>;
+        installSkill: (url: string) => Promise<{ success: boolean; skillName: string; message: string }>;
+        getAssistantsConfig: () => Promise<AssistantsConfig>;
+        saveAssistantsConfig: (config: AssistantsConfig) => Promise<AssistantsConfig>;
         // OpenAI Codex OAuth
         openaiLogin: () => Promise<OpenAILoginResult>;
         openaiLogout: () => Promise<{ success: boolean }>;
         openaiAuthStatus: () => Promise<OpenAIAuthStatus>;
+        // Memory
+        memoryRead: (target: string, date?: string) => Promise<MemoryReadResult>;
+        memoryWrite: (target: string, content: string, date?: string) => Promise<MemoryWriteResult>;
+        memoryList: () => Promise<MemoryListResult>;
         // Scheduler
         getScheduledTasks: () => Promise<ScheduledTask[]>;
         addScheduledTask: (task: ScheduledTaskInput) => Promise<ScheduledTask>;

@@ -30,6 +30,8 @@ export function createSession(options: {
   prompt?: string;
   title: string;
   externalId?: string;
+  assistantId?: string;
+  assistantSkillNames?: string[];
 }): Session {
   const id = crypto.randomUUID();
   const now = Date.now();
@@ -41,6 +43,8 @@ export function createSession(options: {
     cwd: options.cwd,
     allowedTools: options.allowedTools,
     lastPrompt: options.prompt,
+    assistantId: options.assistantId,
+    assistantSkillNames: options.assistantSkillNames ?? [],
     pendingPermissions: new Map(),
     createdAt: now,
     updatedAt: now,
@@ -71,6 +75,8 @@ export function listSessions(): StoredSession[] {
       allowedTools: s.allowedTools,
       lastPrompt: s.lastPrompt,
       claudeSessionId: s.claudeSessionId,
+      assistantId: s.assistantId,
+      assistantSkillNames: s.assistantSkillNames,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
     }))
@@ -110,6 +116,8 @@ export function getSessionHistory(id: string): SessionHistory | null {
       allowedTools: session.allowedTools,
       lastPrompt: session.lastPrompt,
       claudeSessionId: session.claudeSessionId,
+      assistantId: session.assistantId,
+      assistantSkillNames: session.assistantSkillNames,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     },

@@ -6,6 +6,7 @@ import { query, type SDKMessage, type PermissionResult } from "@anthropic-ai/cla
 import type { ServerEvent } from "../types.js";
 import type { Session } from "./session-store.js";
 import { claudeCodeEnv } from "./claude-settings.js";
+import { buildMemoryContext } from "./memory-store.js";
 import { app } from "electron";
 import { join } from "path";
 import { homedir } from "os";
@@ -90,6 +91,20 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerHandle> {
   const { prompt, session, resumeSessionId, onEvent, onSessionUpdate } = options;
   const abortController = new AbortController();
 
+  // Inject memory context for new sessions
+  let effectivePrompt = prompt;
+  if (!resumeSessionId) {
+    try {
+      const memoryCtx = buildMemoryContext();
+      if (memoryCtx) {
+        effectivePrompt = memoryCtx + "\n\n" + prompt;
+        console.log("[Runner/fallback] Memory context injected, length:", memoryCtx.length);
+      }
+    } catch (err) {
+      console.warn("[Runner/fallback] Failed to load memory context:", err);
+    }
+  }
+
   const sendMessage = (message: SDKMessage) => {
     onEvent({
       type: "stream.message",
@@ -108,7 +123,7 @@ export async function runClaude(options: RunnerOptions): Promise<RunnerHandle> {
   (async () => {
     try {
       const q = query({
-        prompt,
+        prompt: effectivePrompt,
         options: {
           cwd: session.cwd ?? DEFAULT_CWD,
           resume: resumeSessionId,

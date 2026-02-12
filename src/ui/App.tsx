@@ -17,6 +17,10 @@ import MDContent from "./render/markdown";
 import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
 
 const ONBOARDING_COMPLETE_KEY = "vk-cowork-onboarding-complete";
+const SIDEBAR_WIDTH_KEY = "vk-cowork-sidebar-width";
+const MIN_SIDEBAR_WIDTH = 280;
+const MAX_SIDEBAR_WIDTH = 520;
+const DEFAULT_SIDEBAR_WIDTH = 340;
 
 // 按 session 存储的 partialMessage 状态
 type SessionPartialState = {
@@ -43,6 +47,11 @@ function App() {
   // 使用 Map 按 sessionId 存储每个 session 的 partial message 状态
   const partialMessagesRef = useRef<Map<string, string>>(new Map());
   const [partialMessages, setPartialMessages] = useState<Map<string, SessionPartialState>>(new Map());
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const raw = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    if (!Number.isFinite(raw)) return DEFAULT_SIDEBAR_WIDTH;
+    return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, raw));
+  });
 
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
@@ -355,6 +364,30 @@ function App() {
     resolvePermissionRequest(activeSessionId, toolUseId);
   }, [activeSessionId, sendEvent, resolvePermissionRequest]);
 
+  const handleSidebarResizeStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const nextWidth = startWidth + (moveEvent.clientX - startX);
+      const clamped = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, nextWidth));
+      setSidebarWidth(clamped);
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+  }, [sidebarWidth]);
+
   // Show onboarding wizard for new users
   if (showOnboarding) {
     return <OnboardingWizard onComplete={handleOnboardingComplete} />;
@@ -366,9 +399,11 @@ function App() {
         connected={connected}
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
+        width={sidebarWidth}
+        onResizeStart={handleSidebarResizeStart}
       />
 
-      <main className="flex flex-1 flex-col ml-[280px] bg-surface-cream">
+      <main className="flex flex-1 flex-col bg-surface-cream" style={{ marginLeft: `${sidebarWidth}px` }}>
         <div 
           className="flex items-center justify-between h-12 border-b border-ink-900/10 bg-surface-cream select-none px-4"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
@@ -528,7 +563,7 @@ function App() {
           </div>
         </div>
 
-        <PromptInput sendEvent={sendEvent} />
+        <PromptInput sendEvent={sendEvent} sidebarWidth={sidebarWidth} />
       </main>
 
       {showStartModal && (

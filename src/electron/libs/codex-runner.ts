@@ -11,6 +11,7 @@ import {
 } from "@openai/codex-sdk";
 import type { ServerEvent } from "../types.js";
 import type { Session } from "./session-store.js";
+import { buildMemoryContext } from "./memory-store.js";
 import { app } from "electron";
 import { join } from "path";
 import { existsSync } from "fs";
@@ -273,6 +274,20 @@ export async function runCodex(
   const { prompt, session, model, onEvent, onSessionUpdate } = options;
   const abortController = new AbortController();
 
+  // Inject memory context for new sessions
+  let effectivePrompt = prompt;
+  if (!session.claudeSessionId) {
+    try {
+      const memoryCtx = buildMemoryContext();
+      if (memoryCtx) {
+        effectivePrompt = memoryCtx + "\n\n" + prompt;
+        console.log("[CodexRunner/fallback] Memory context injected, length:", memoryCtx.length);
+      }
+    } catch (err) {
+      console.warn("[CodexRunner/fallback] Failed to load memory context:", err);
+    }
+  }
+
   const sendMessage = (message: Record<string, unknown>) => {
     onEvent({
       type: "stream.message",
@@ -303,7 +318,7 @@ export async function runCodex(
         ? codex.resumeThread(session.claudeSessionId, threadOpts)
         : codex.startThread(threadOpts);
 
-      const { events } = await thread.runStreamed(prompt, {
+      const { events } = await thread.runStreamed(effectivePrompt, {
         signal: abortController.signal,
       });
 

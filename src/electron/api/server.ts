@@ -13,6 +13,7 @@ import { app as electronApp } from 'electron';
 import { agentRoutes } from './routes/agent.js';
 import { healthRoutes } from './routes/health.js';
 import { sessionRoutes } from './routes/session.js';
+import { memoryRoutes } from './routes/memory.js';
 import { initSessionStore, shutdownSessionStore } from './services/session.js';
 
 const honoApp = new Hono();
@@ -29,6 +30,7 @@ honoApp.use('*', cors({
 honoApp.route('/health', healthRoutes);
 honoApp.route('/agent', agentRoutes);
 honoApp.route('/session', sessionRoutes);
+honoApp.route('/memory', memoryRoutes);
 
 // Root endpoint
 honoApp.get('/', (c) => {
@@ -39,6 +41,7 @@ honoApp.get('/', (c) => {
       health: '/health',
       agent: '/agent',
       session: '/session',
+      memory: '/memory',
     },
   });
 });

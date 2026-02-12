@@ -99,6 +99,8 @@ export async function startSession(
     externalSessionId?: string;  // Pass Electron's session ID for stop tracking
     provider?: string;
     model?: string;
+    assistantId?: string;
+    assistantSkillNames?: string[];
   },
   onEvent: StreamCallback
 ): Promise<void> {

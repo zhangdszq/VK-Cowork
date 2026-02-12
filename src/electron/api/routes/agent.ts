@@ -11,6 +11,13 @@ import type { AgentProvider } from '../types.js';
 
 const agent = new Hono();
 
+function applyAssistantSkills(prompt: string, skillNames?: string[]): string {
+  const normalized = (skillNames ?? []).map((item) => item.trim()).filter(Boolean);
+  if (normalized.length === 0) return prompt;
+  const commands = normalized.map((skill) => `/${skill}`).join("\n");
+  return `${commands}\n\n${prompt}`;
+}
+
 // Helper to create SSE stream
 function createSSEStream(
   sessionId: string,
@@ -59,6 +66,8 @@ agent.post('/start', async (c) => {
     externalSessionId?: string;
     provider?: AgentProvider;
     model?: string;
+    assistantId?: string;
+    assistantSkillNames?: string[];
   }>();
 
   if (!body.prompt) {
@@ -70,6 +79,7 @@ agent.post('/start', async (c) => {
   }
 
   const provider: AgentProvider = body.provider ?? 'claude';
+  const effectivePrompt = applyAssistantSkills(body.prompt, body.assistantSkillNames);
 
   // Create session with external ID if provided
   const session = createSession({
@@ -78,6 +88,8 @@ agent.post('/start', async (c) => {
     allowedTools: body.allowedTools,
     prompt: body.prompt,
     externalId: body.externalSessionId,
+    assistantId: body.assistantId,
+    assistantSkillNames: body.assistantSkillNames,
   });
   session.provider = provider;
   session.model = body.model;
@@ -118,7 +130,7 @@ agent.post('/start', async (c) => {
 
     // Dispatch to correct runner based on provider
     const runnerOpts = {
-      prompt: body.prompt,
+      prompt: effectivePrompt,
       session,
       model: body.model,
       onSessionUpdate: (updates: Partial<typeof session>) => {

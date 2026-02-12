@@ -21,12 +21,31 @@ export function StartSessionModal({
   onClose
 }: StartSessionModalProps) {
   const [recentCwds, setRecentCwds] = useState<string[]>([]);
-  const provider = useAppStore((s) => s.provider);
-  const setProvider = useAppStore((s) => s.setProvider);
+  const selectedAssistantId = useAppStore((s) => s.selectedAssistantId);
+  const setSelectedAssistant = useAppStore((s) => s.setSelectedAssistant);
+  const [assistants, setAssistants] = useState<AssistantConfig[]>([]);
 
   useEffect(() => {
     window.electron.getRecentCwds().then(setRecentCwds).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    window.electron
+      .getAssistantsConfig()
+      .then((config) => {
+        const list = config.assistants ?? [];
+        setAssistants(list);
+        if (list.length === 0) return;
+        const currentId = useAppStore.getState().selectedAssistantId;
+        const fallbackId = config.defaultAssistantId ?? list[0]?.id;
+        const targetId = list.some((item) => item.id === currentId) ? currentId : fallbackId;
+        const target = list.find((item) => item.id === targetId) ?? list[0];
+        if (target) {
+          setSelectedAssistant(target.id, target.skillNames ?? [], target.provider, target.model);
+        }
+      })
+      .catch(console.error);
+  }, [setSelectedAssistant]);
 
   const handleSelectDirectory = async () => {
     const result = await window.electron.selectDirectory();
@@ -83,42 +102,44 @@ export function StartSessionModal({
               </div>
             )}
           </label>
-          {/* Provider selector */}
+          {/* Assistant selector */}
           <div className="grid gap-1.5">
-            <span className="text-xs font-medium text-muted">Provider</span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setProvider("claude")}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors ${
-                  provider === "claude"
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-ink-900/10 bg-surface-secondary text-muted hover:border-ink-900/20 hover:text-ink-700"
-                }`}
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 1v6m0 6v10" />
-                </svg>
-                Claude
-              </button>
-              <button
-                type="button"
-                onClick={() => setProvider("codex")}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors ${
-                  provider === "codex"
-                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
-                    : "border-ink-900/10 bg-surface-secondary text-muted hover:border-ink-900/20 hover:text-ink-700"
-                }`}
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                  <path d="M2 17l10 5 10-5" />
-                  <path d="M2 12l10 5 10-5" />
-                </svg>
-                Codex
-                <span className="text-[10px] font-normal opacity-60">gpt-5.3</span>
-              </button>
+            <span className="text-xs font-medium text-muted">小助理</span>
+            <div className="grid gap-2">
+              {assistants.map((assistant) => {
+                const selected = selectedAssistantId === assistant.id;
+                const skillText = assistant.skillNames?.length
+                  ? assistant.skillNames.join(", ")
+                  : "未配置技能";
+                return (
+                  <button
+                    key={assistant.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedAssistant(
+                        assistant.id,
+                        assistant.skillNames ?? [],
+                        assistant.provider,
+                        assistant.model
+                      )
+                    }
+                    className={`w-full rounded-xl border px-4 py-2.5 text-left transition-colors ${
+                      selected
+                        ? "border-accent bg-accent/10 text-ink-800"
+                        : "border-ink-900/10 bg-surface-secondary text-muted hover:border-ink-900/20 hover:text-ink-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{assistant.name}</span>
+                      <span className="text-[11px] uppercase tracking-wide opacity-70">
+                        {assistant.provider}
+                        {assistant.model ? ` · ${assistant.model}` : ""}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] opacity-80">skills: {skillText}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

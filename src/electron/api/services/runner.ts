@@ -8,6 +8,7 @@ import {
 } from '@openai/codex-sdk';
 import type { Session } from '../types.js';
 import { recordMessage, updateSession, addPendingPermission } from './session.js';
+import { buildMemoryContext } from '../../libs/memory-store.js';
 import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -177,12 +178,26 @@ export async function* runClaude(options: RunnerOptions): AsyncGenerator<ServerE
   const claudeCodePath = getClaudeCodePath();
   const enhancedEnv = getEnhancedEnv();
 
-  console.log('[Runner] Starting Claude query:', { prompt: prompt.slice(0, 50), cwd: session.cwd ?? DEFAULT_CWD, resume: resumeSessionId });
+  // Inject memory context into prompt (only for new sessions, not resume)
+  let effectivePrompt = prompt;
+  if (!resumeSessionId) {
+    try {
+      const memoryCtx = buildMemoryContext();
+      if (memoryCtx) {
+        effectivePrompt = memoryCtx + '\n\n' + prompt;
+        console.log('[Runner] Memory context injected, length:', memoryCtx.length);
+      }
+    } catch (err) {
+      console.warn('[Runner] Failed to load memory context:', err);
+    }
+  }
+
+  console.log('[Runner] Starting Claude query:', { prompt: effectivePrompt.slice(0, 50), cwd: session.cwd ?? DEFAULT_CWD, resume: resumeSessionId });
   console.log('[Runner] Claude Code path:', claudeCodePath);
 
   try {
     const q = query({
-      prompt,
+      prompt: effectivePrompt,
       options: {
         cwd: session.cwd ?? DEFAULT_CWD,
         resume: resumeSessionId,
@@ -473,6 +488,20 @@ export async function* runCodex(options: RunnerOptions): AsyncGenerator<ServerEv
 
   const DEFAULT_CWD = process.cwd();
 
+  // Inject memory context into prompt (only for new sessions, not resume)
+  let effectivePrompt = prompt;
+  if (!session.claudeSessionId) {
+    try {
+      const memoryCtx = buildMemoryContext();
+      if (memoryCtx) {
+        effectivePrompt = memoryCtx + '\n\n' + prompt;
+        console.log('[CodexRunner] Memory context injected, length:', memoryCtx.length);
+      }
+    } catch (err) {
+      console.warn('[CodexRunner] Failed to load memory context:', err);
+    }
+  }
+
   try {
     const codexPath = getCodexBinaryPath();
     const codexOpts: CodexOptions = {};
@@ -494,7 +523,7 @@ export async function* runCodex(options: RunnerOptions): AsyncGenerator<ServerEv
       ? codex.resumeThread(session.claudeSessionId, threadOpts)
       : codex.startThread(threadOpts);
 
-    const { events } = await thread.runStreamed(prompt, {
+    const { events } = await thread.runStreamed(effectivePrompt, {
       signal: abortController.signal,
     });
 

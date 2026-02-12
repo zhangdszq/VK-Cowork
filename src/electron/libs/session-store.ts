@@ -18,6 +18,8 @@ export type Session = {
   lastPrompt?: string;
   provider?: AgentProvider;
   model?: string;
+  assistantId?: string;
+  assistantSkillNames?: string[];
   pendingPermissions: Map<string, PendingPermission>;
   abortController?: AbortController;
 };
@@ -32,6 +34,8 @@ export type StoredSession = {
   claudeSessionId?: string;
   provider?: AgentProvider;
   model?: string;
+  assistantId?: string;
+  assistantSkillNames?: string[];
   createdAt: number;
   updatedAt: number;
 };
@@ -40,6 +44,16 @@ export type SessionHistory = {
   session: StoredSession;
   messages: StreamMessage[];
 };
+
+function parseSkillNames(raw: unknown): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+  } catch {
+    return [];
+  }
+}
 
 export class SessionStore {
   private sessions = new Map<string, Session>();
@@ -51,7 +65,7 @@ export class SessionStore {
     this.loadSessions();
   }
 
-  createSession(options: { cwd?: string; allowedTools?: string; prompt?: string; title: string; provider?: AgentProvider; model?: string }): Session {
+  createSession(options: { cwd?: string; allowedTools?: string; prompt?: string; title: string; provider?: AgentProvider; model?: string; assistantId?: string; assistantSkillNames?: string[] }): Session {
     const id = crypto.randomUUID();
     const now = Date.now();
     const session: Session = {
@@ -63,14 +77,16 @@ export class SessionStore {
       lastPrompt: options.prompt,
       provider: options.provider ?? "claude",
       model: options.model,
+      assistantId: options.assistantId,
+      assistantSkillNames: options.assistantSkillNames ?? [],
       pendingPermissions: new Map()
     };
     this.sessions.set(id, session);
     this.db
       .prepare(
         `insert into sessions
-          (id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model, created_at, updated_at)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          (id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model, assistant_id, assistant_skill_names, created_at, updated_at)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -82,6 +98,8 @@ export class SessionStore {
         session.lastPrompt ?? null,
         session.provider ?? "claude",
         session.model ?? null,
+        session.assistantId ?? null,
+        JSON.stringify(session.assistantSkillNames ?? []),
         now,
         now
       );
@@ -95,7 +113,7 @@ export class SessionStore {
   listSessions(): StoredSession[] {
     const rows = this.db
       .prepare(
-        `select id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model, created_at, updated_at
+        `select id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model, assistant_id, assistant_skill_names, created_at, updated_at
          from sessions
          order by updated_at desc`
       )
@@ -110,6 +128,8 @@ export class SessionStore {
       claudeSessionId: row.claude_session_id ? String(row.claude_session_id) : undefined,
       provider: (row.provider as AgentProvider) ?? "claude",
       model: row.model ? String(row.model) : undefined,
+      assistantId: row.assistant_id ? String(row.assistant_id) : undefined,
+      assistantSkillNames: parseSkillNames(row.assistant_skill_names),
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at)
     }));
@@ -132,7 +152,7 @@ export class SessionStore {
   getSessionHistory(id: string): SessionHistory | null {
     const sessionRow = this.db
       .prepare(
-        `select id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model, created_at, updated_at
+        `select id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model, assistant_id, assistant_skill_names, created_at, updated_at
          from sessions
          where id = ?`
       )
@@ -157,6 +177,8 @@ export class SessionStore {
         claudeSessionId: sessionRow.claude_session_id ? String(sessionRow.claude_session_id) : undefined,
         provider: (sessionRow.provider as AgentProvider) ?? "claude",
         model: sessionRow.model ? String(sessionRow.model) : undefined,
+        assistantId: sessionRow.assistant_id ? String(sessionRow.assistant_id) : undefined,
+        assistantSkillNames: parseSkillNames(sessionRow.assistant_skill_names),
         createdAt: Number(sessionRow.created_at),
         updatedAt: Number(sessionRow.updated_at)
       },
@@ -209,6 +231,8 @@ export class SessionStore {
       lastPrompt: "last_prompt",
       provider: "provider",
       model: "model",
+      assistantId: "assistant_id",
+      assistantSkillNames: "assistant_skill_names",
     } as const;
 
     for (const key of Object.keys(updates) as Array<keyof typeof updatable>) {
@@ -216,7 +240,11 @@ export class SessionStore {
       if (!column) continue;
       fields.push(`${column} = ?`);
       const value = updates[key];
-      values.push(value === undefined ? null : (value as string));
+      if (key === "assistantSkillNames") {
+        values.push(value === undefined ? null : JSON.stringify(value));
+      } else {
+        values.push(value === undefined ? null : (value as string));
+      }
     }
 
     if (fields.length === 0) return;
@@ -241,6 +269,8 @@ export class SessionStore {
         last_prompt text,
         provider text default 'claude',
         model text,
+        assistant_id text,
+        assistant_skill_names text,
         created_at integer not null,
         updated_at integer not null
       )`
@@ -248,6 +278,8 @@ export class SessionStore {
     // Migration: add provider and model columns if they don't exist
     try { this.db.exec(`alter table sessions add column provider text default 'claude'`); } catch { /* already exists */ }
     try { this.db.exec(`alter table sessions add column model text`); } catch { /* already exists */ }
+    try { this.db.exec(`alter table sessions add column assistant_id text`); } catch { /* already exists */ }
+    try { this.db.exec(`alter table sessions add column assistant_skill_names text`); } catch { /* already exists */ }
     this.db.exec(
       `create table if not exists messages (
         id text primary key,
@@ -263,7 +295,7 @@ export class SessionStore {
   private loadSessions(): void {
     const rows = this.db
       .prepare(
-        `select id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model
+        `select id, title, claude_session_id, status, cwd, allowed_tools, last_prompt, provider, model, assistant_id, assistant_skill_names
          from sessions`
       )
       .all();
@@ -278,6 +310,8 @@ export class SessionStore {
         lastPrompt: row.last_prompt ? String(row.last_prompt) : undefined,
         provider: (row.provider as AgentProvider) ?? "claude",
         model: row.model ? String(row.model) : undefined,
+        assistantId: row.assistant_id ? String(row.assistant_id) : undefined,
+        assistantSkillNames: parseSkillNames(row.assistant_skill_names),
         pendingPermissions: new Map()
       };
       this.sessions.set(session.id, session);

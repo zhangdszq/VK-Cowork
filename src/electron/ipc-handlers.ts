@@ -16,10 +16,56 @@ import {
 } from './libs/api-client.js';
 import { app } from 'electron';
 import { join } from 'path';
+import { existsSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
 
 // Local session store for persistence (SQLite)
 const DB_PATH = join(app.getPath('userData'), 'sessions.db');
 const sessions = new SessionStore(DB_PATH);
+
+/**
+ * Ensure AGENTS.md exists in the working directory.
+ * Created once; never overwrites an existing file.
+ */
+function ensureAgentsMd(cwd: string | undefined): void {
+  if (!cwd) return;
+  const agentsPath = join(cwd, 'AGENTS.md');
+  if (existsSync(agentsPath)) return;
+
+  const home = homedir();
+  const skillsDir = join(home, '.claude', 'skills');
+  const memoryDir = join(home, '.vk-cowork', 'memory');
+
+  const content = `# AGENTS.md
+
+## 基本规则
+- 始终使用中文回复
+- 代码注释使用英文
+- 遵循项目现有的代码风格和目录结构
+
+## 技能目录
+技能文件位于 \`${skillsDir}/\`，可在对话中通过 \`/技能名\` 调用。
+
+## 记忆系统
+持久记忆存储在 \`${memoryDir}/\`：
+- \`MEMORY.md\` — 长期记忆（用户偏好、项目决策、重要事实）
+- \`daily/YYYY-MM-DD.md\` — 每日记忆（临时笔记、当日上下文）
+
+当用户提到需要记住的偏好或重要决策时，请主动写入对应的记忆文件。
+
+## 工具使用
+- 优先使用项目已有的工具和依赖
+- 修改文件前先阅读相关代码
+- 执行命令前确认工作目录正确
+`;
+
+  try {
+    writeFileSync(agentsPath, content, 'utf8');
+    console.log('[IPC] Created AGENTS.md at:', agentsPath);
+  } catch (err) {
+    console.warn('[IPC] Failed to create AGENTS.md:', err);
+  }
+}
 
 // Track runner handles for direct mode
 const runnerHandles = new Map<string, RunnerHandle>();
@@ -67,6 +113,13 @@ function useEmbeddedApi(): boolean {
   return isEmbeddedApiRunning();
 }
 
+function applyAssistantSkills(prompt: string, skillNames?: string[]): string {
+  const normalized = (skillNames ?? []).map((item) => item.trim()).filter(Boolean);
+  if (normalized.length === 0) return prompt;
+  const commands = normalized.map((skill) => `/${skill}`).join("\n");
+  return `${commands}\n\n${prompt}`;
+}
+
 export async function handleClientEvent(event: ClientEvent) {
   if (event.type === 'session.list') {
     emit({
@@ -108,7 +161,11 @@ export async function handleClientEvent(event: ClientEvent) {
   }
 
   if (event.type === 'session.start') {
+    // Ensure AGENTS.md exists in working directory
+    ensureAgentsMd(event.payload.cwd);
+
     const provider = event.payload.provider ?? 'claude';
+    const effectivePrompt = applyAssistantSkills(event.payload.prompt, event.payload.assistantSkillNames);
     const session = sessions.createSession({
       cwd: event.payload.cwd,
       title: event.payload.title,
@@ -116,6 +173,8 @@ export async function handleClientEvent(event: ClientEvent) {
       prompt: event.payload.prompt,
       provider,
       model: event.payload.model,
+      assistantId: event.payload.assistantId,
+      assistantSkillNames: event.payload.assistantSkillNames,
     });
 
     sessions.updateSession(session.id, {
@@ -131,6 +190,7 @@ export async function handleClientEvent(event: ClientEvent) {
         title: session.title,
         cwd: session.cwd,
         provider,
+        assistantId: session.assistantId,
       },
     });
 
@@ -143,10 +203,12 @@ export async function handleClientEvent(event: ClientEvent) {
             cwd: event.payload.cwd,
             title: event.payload.title,
             allowedTools: event.payload.allowedTools,
-            prompt: event.payload.prompt,
+            prompt: effectivePrompt,
             externalSessionId: session.id,
             provider,
             model: event.payload.model,
+            assistantId: session.assistantId,
+            assistantSkillNames: session.assistantSkillNames,
           },
           (apiEvent) => {
             // Map API session ID to local session ID
@@ -175,6 +237,7 @@ export async function handleClientEvent(event: ClientEvent) {
             title: session.title,
             cwd: session.cwd,
             error: String(error),
+            assistantId: session.assistantId,
           },
         });
       } finally {
@@ -189,7 +252,7 @@ export async function handleClientEvent(event: ClientEvent) {
 
       if (provider === 'codex') {
         runCodex({
-          prompt: event.payload.prompt,
+          prompt: effectivePrompt,
           session,
           model: event.payload.model,
           onEvent: emit,
@@ -209,7 +272,7 @@ export async function handleClientEvent(event: ClientEvent) {
           });
       } else {
         runClaude({
-          prompt: event.payload.prompt,
+          prompt: effectivePrompt,
           session,
           resumeSessionId: session.claudeSessionId,
           onEvent: emit,
@@ -264,6 +327,7 @@ export async function handleClientEvent(event: ClientEvent) {
         status: 'running',
         title: session.title,
         cwd: session.cwd,
+        assistantId: session.assistantId,
       },
     });
 
@@ -300,6 +364,7 @@ export async function handleClientEvent(event: ClientEvent) {
             title: session.title,
             cwd: session.cwd,
             error: String(error),
+            assistantId: session.assistantId,
           },
         });
       } finally {
@@ -385,6 +450,7 @@ export async function handleClientEvent(event: ClientEvent) {
         status: 'idle',
         title: session.title,
         cwd: session.cwd,
+        assistantId: session.assistantId,
       },
     });
     return;
