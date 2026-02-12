@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAppStore } from "../store/useAppStore";
 import { SettingsModal } from "./SettingsModal";
+import { AssistantManagerModal } from "./AssistantManagerModal";
 
 interface SidebarProps {
   connected: boolean;
@@ -28,6 +29,7 @@ export function Sidebar({
   const [resumeSessionId, setResumeSessionId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAssistantManager, setShowAssistantManager] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
 
   const formatCwd = (cwd?: string) => {
@@ -43,7 +45,7 @@ export function Sidebar({
     return list;
   }, [sessions]);
 
-  useEffect(() => {
+  const loadAssistants = useCallback(() => {
     window.electron.getAssistantsConfig().then((config) => {
       const list = config.assistants ?? [];
       setAssistants(list);
@@ -53,10 +55,14 @@ export function Sidebar({
       const targetId = list.some((item) => item.id === currentId) ? currentId : fallbackId;
       const target = list.find((item) => item.id === targetId) ?? list[0];
       if (target) {
-        setSelectedAssistant(target.id, target.skillNames ?? [], target.provider, target.model);
+        setSelectedAssistant(target.id, target.skillNames ?? [], target.provider, target.model, target.persona);
       }
     }).catch(console.error);
   }, [setSelectedAssistant]);
+
+  useEffect(() => {
+    loadAssistants();
+  }, [loadAssistants]);
 
   const currentAssistant = useMemo(() => {
     if (!assistants.length) return undefined;
@@ -106,7 +112,7 @@ export function Sidebar({
 
   const handleSelectAssistant = (assistant?: AssistantConfig) => {
     if (!assistant) return;
-    setSelectedAssistant(assistant.id, assistant.skillNames ?? [], assistant.provider, assistant.model);
+    setSelectedAssistant(assistant.id, assistant.skillNames ?? [], assistant.provider, assistant.model, assistant.persona);
   };
 
   const getAssistantInitial = (name: string) => {
@@ -151,7 +157,19 @@ export function Sidebar({
             })}
           </div>
 
-          <div className="mt-auto border-t border-ink-900/5 pt-3">
+          <div className="mt-auto border-t border-ink-900/5 pt-2 grid gap-1">
+            <button
+              onClick={() => setShowAssistantManager(true)}
+              title="助理管理"
+              className="flex h-10 w-full items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface-tertiary hover:text-ink-700"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </button>
             <button
               onClick={() => setShowSettings(true)}
               title="设置"
@@ -183,9 +201,9 @@ export function Sidebar({
             </button>
           </div>
 
-          <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pb-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-2">
             {filteredSessions.length === 0 && (
-              <div className="rounded-xl border border-ink-900/5 bg-surface px-3 py-4 text-center text-xs text-muted">
+              <div className="px-3 py-4 text-center text-xs text-muted">
                 暂无任务
               </div>
             )}
@@ -193,7 +211,7 @@ export function Sidebar({
             {filteredSessions.map((session) => (
               <div
                 key={session.id}
-                className={`h-[82px] cursor-pointer rounded-xl border px-2 py-3 text-left transition ${activeSessionId === session.id ? "border-accent/30 bg-accent-subtle" : "border-ink-900/5 bg-surface hover:bg-surface-tertiary"}`}
+                className={`cursor-pointer border-b border-ink-900/5 px-2 py-2.5 text-left transition last:border-b-0 ${activeSessionId === session.id ? "bg-accent-subtle" : "bg-surface hover:bg-surface-tertiary"}`}
                 onClick={() => setActiveSessionId(session.id)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -287,6 +305,12 @@ export function Sidebar({
       </Dialog.Root>
 
       <SettingsModal open={showSettings} onOpenChange={setShowSettings} />
+
+      <AssistantManagerModal
+        open={showAssistantManager}
+        onOpenChange={setShowAssistantManager}
+        onAssistantsChanged={loadAssistants}
+      />
 
       <div
         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-accent/20"

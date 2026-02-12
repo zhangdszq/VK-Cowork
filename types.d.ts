@@ -111,6 +111,7 @@ type AssistantConfig = {
     provider: "claude" | "codex";
     model?: string;
     skillNames?: string[];
+    persona?: string;
 }
 
 type AssistantsConfig = {

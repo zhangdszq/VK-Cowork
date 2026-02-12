@@ -525,13 +525,15 @@ export const MessageCard = memo(function MessageCard({
   isLast = false,
   isRunning = false,
   showSystemInfo = false,
-  onAskUserQuestionAnswer
+  onAskUserQuestionAnswer,
+  assistantName,
 }: {
   message: StreamMessage;
   isLast?: boolean;
   isRunning?: boolean;
   showSystemInfo?: boolean;
   onAskUserQuestionAnswer?: (toolUseId: string, answers: Record<string, string>) => void;
+  assistantName?: string;
 }) {
   const showIndicator = isLast && isRunning;
 
@@ -584,7 +586,7 @@ export const MessageCard = memo(function MessageCard({
             return <AssistantBlockCard key={idx} title="Thinking" text={content.thinking} showIndicator={isLastContent && showIndicator} />;
           }
           if (content.type === "text") {
-            return <AssistantBlockCard key={idx} title="Assistant" text={content.text} showIndicator={isLastContent && showIndicator} />;
+            return <AssistantBlockCard key={idx} title={assistantName || "Assistant"} text={content.text} showIndicator={isLastContent && showIndicator} />;
           }
           if (content.type === "tool_use") {
             if (content.name === "AskUserQuestion") {

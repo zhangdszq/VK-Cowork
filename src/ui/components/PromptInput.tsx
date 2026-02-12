@@ -119,6 +119,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
   const codexModel = useAppStore((state) => state.codexModel);
   const selectedAssistantId = useAppStore((state) => state.selectedAssistantId);
   const selectedAssistantSkillNames = useAppStore((state) => state.selectedAssistantSkillNames);
+  const selectedAssistantPersona = useAppStore((state) => state.selectedAssistantPersona);
 
   // Image attachment - only store path, Agent will use built-in analyze_image tool
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -229,6 +230,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
           ...(provider === "codex" ? { model: codexModel } : {}),
           ...(selectedAssistantId ? { assistantId: selectedAssistantId } : {}),
           ...(selectedAssistantSkillNames.length > 0 ? { assistantSkillNames: selectedAssistantSkillNames } : {}),
+          ...(selectedAssistantPersona ? { assistantPersona: selectedAssistantPersona } : {}),
         }
       });
     } else {
@@ -239,7 +241,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
       sendEvent({ type: "session.continue", payload: { sessionId: activeSessionId, prompt: finalPrompt } });
     }
     setPrompt("");
-  }, [activeSession, activeSessionId, cwd, imagePath, prompt, provider, codexModel, selectedAssistantId, selectedAssistantSkillNames, sendEvent, setGlobalError, setPendingStart, setPrompt]);
+  }, [activeSession, activeSessionId, cwd, imagePath, prompt, provider, codexModel, selectedAssistantId, selectedAssistantSkillNames, selectedAssistantPersona, sendEvent, setGlobalError, setPendingStart, setPrompt]);
 
   const handleStop = useCallback(() => {
     if (!activeSessionId) return;
@@ -276,6 +278,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
           ...(provider === "codex" ? { model: codexModel } : {}),
           ...(selectedAssistantId ? { assistantId: selectedAssistantId } : {}),
           ...(selectedAssistantSkillNames.length > 0 ? { assistantSkillNames: selectedAssistantSkillNames } : {}),
+          ...(selectedAssistantPersona ? { assistantPersona: selectedAssistantPersona } : {}),
         }
       });
       return;
@@ -283,7 +286,7 @@ export function usePromptActions(sendEvent: (event: ClientEvent) => void) {
     
     // Otherwise use normal flow
     handleSend();
-  }, [cwd, prompt, handleSend, sendEvent, setGlobalError, setPendingStart, provider, codexModel, selectedAssistantId, selectedAssistantSkillNames]);
+  }, [cwd, prompt, handleSend, sendEvent, setGlobalError, setPendingStart, provider, codexModel, selectedAssistantId, selectedAssistantSkillNames, selectedAssistantPersona]);
 
   return { 
     prompt, 
@@ -313,6 +316,8 @@ export function PromptInput({ sendEvent, sidebarWidth }: PromptInputProps) {
   } = usePromptActions(sendEvent);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const selectedAssistantSkillNames = useAppStore((state) => state.selectedAssistantSkillNames);
+
   // Skills state
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [showSkills, setShowSkills] = useState(false);
@@ -335,8 +340,12 @@ export function PromptInput({ sendEvent, sidebarWidth }: PromptInputProps) {
     }).catch(console.error);
   }, []);
 
-  // Filter skills based on input
+  // Filter skills based on input — only show skills the current assistant owns
   const filteredSkills = skills.filter(skill => {
+    // If assistant has configured skills, only show those
+    if (selectedAssistantSkillNames.length > 0) {
+      if (!selectedAssistantSkillNames.includes(skill.name)) return false;
+    }
     const filter = skillFilter.toLowerCase().replace(/^\//, "");
     return skill.name.toLowerCase().includes(filter) ||
       (skill.description || "").toLowerCase().includes(filter);

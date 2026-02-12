@@ -71,6 +71,12 @@ function App() {
   const showSystemInfo = useAppStore((s) => s.showSystemInfo);
   const setShowSystemInfo = useAppStore((s) => s.setShowSystemInfo);
 
+  // Assistants list for resolving assistant names
+  const [assistantsList, setAssistantsList] = useState<AssistantConfig[]>([]);
+  useEffect(() => {
+    window.electron.getAssistantsConfig().then((c) => setAssistantsList(c.assistants ?? [])).catch(console.error);
+  }, []);
+
   // Helper function to extract partial message content
   const getPartialMessageContent = (eventMessage: any) => {
     try {
@@ -170,6 +176,16 @@ function App() {
   const messages = activeSession?.messages ?? [];
   const permissionRequests = activeSession?.permissionRequests ?? [];
   const isRunning = activeSession?.status === "running";
+  const selectedAssistantId = useAppStore((s) => s.selectedAssistantId);
+  const activeAssistantName = useMemo(() => {
+    const aid = activeSession?.assistantId;
+    if (!aid) return undefined;
+    return assistantsList.find((a) => a.id === aid)?.name;
+  }, [activeSession?.assistantId, assistantsList]);
+  const selectedAssistantName = useMemo(() => {
+    if (!selectedAssistantId) return undefined;
+    return assistantsList.find((a) => a.id === selectedAssistantId)?.name;
+  }, [selectedAssistantId, assistantsList]);
 
   // Check if the last assistant message contains chapter selection prompt
   // Only show if user hasn't replied yet
@@ -483,6 +499,7 @@ function App() {
                     isRunning={isRunning}
                     showSystemInfo={showSystemInfo}
                     onAskUserQuestionAnswer={handleAskUserQuestionAnswer}
+                    assistantName={activeAssistantName}
                   />
                 );
               })
@@ -575,6 +592,7 @@ function App() {
           onPromptChange={setPrompt}
           onStart={handleStartFromModal}
           onClose={() => setShowStartModal(false)}
+          assistantName={selectedAssistantName}
         />
       )}
 

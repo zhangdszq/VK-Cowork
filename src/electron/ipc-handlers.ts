@@ -113,11 +113,17 @@ function useEmbeddedApi(): boolean {
   return isEmbeddedApiRunning();
 }
 
-function applyAssistantSkills(prompt: string, skillNames?: string[]): string {
+function applyAssistantContext(prompt: string, skillNames?: string[], persona?: string): string {
+  const parts: string[] = [];
+  if (persona?.trim()) {
+    parts.push(`[System Persona] ${persona.trim()}`);
+  }
   const normalized = (skillNames ?? []).map((item) => item.trim()).filter(Boolean);
-  if (normalized.length === 0) return prompt;
-  const commands = normalized.map((skill) => `/${skill}`).join("\n");
-  return `${commands}\n\n${prompt}`;
+  if (normalized.length > 0) {
+    parts.push(normalized.map((skill) => `/${skill}`).join("\n"));
+  }
+  if (parts.length === 0) return prompt;
+  return `${parts.join("\n\n")}\n\n${prompt}`;
 }
 
 export async function handleClientEvent(event: ClientEvent) {
@@ -165,7 +171,7 @@ export async function handleClientEvent(event: ClientEvent) {
     ensureAgentsMd(event.payload.cwd);
 
     const provider = event.payload.provider ?? 'claude';
-    const effectivePrompt = applyAssistantSkills(event.payload.prompt, event.payload.assistantSkillNames);
+    const effectivePrompt = applyAssistantContext(event.payload.prompt, event.payload.assistantSkillNames, event.payload.assistantPersona);
     const session = sessions.createSession({
       cwd: event.payload.cwd,
       title: event.payload.title,

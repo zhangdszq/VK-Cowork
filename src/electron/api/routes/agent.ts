@@ -11,11 +11,17 @@ import type { AgentProvider } from '../types.js';
 
 const agent = new Hono();
 
-function applyAssistantSkills(prompt: string, skillNames?: string[]): string {
+function applyAssistantContext(prompt: string, skillNames?: string[], persona?: string): string {
+  const parts: string[] = [];
+  if (persona?.trim()) {
+    parts.push(`[System Persona] ${persona.trim()}`);
+  }
   const normalized = (skillNames ?? []).map((item) => item.trim()).filter(Boolean);
-  if (normalized.length === 0) return prompt;
-  const commands = normalized.map((skill) => `/${skill}`).join("\n");
-  return `${commands}\n\n${prompt}`;
+  if (normalized.length > 0) {
+    parts.push(normalized.map((skill) => `/${skill}`).join("\n"));
+  }
+  if (parts.length === 0) return prompt;
+  return `${parts.join("\n\n")}\n\n${prompt}`;
 }
 
 // Helper to create SSE stream
@@ -68,6 +74,7 @@ agent.post('/start', async (c) => {
     model?: string;
     assistantId?: string;
     assistantSkillNames?: string[];
+    assistantPersona?: string;
   }>();
 
   if (!body.prompt) {
@@ -79,7 +86,7 @@ agent.post('/start', async (c) => {
   }
 
   const provider: AgentProvider = body.provider ?? 'claude';
-  const effectivePrompt = applyAssistantSkills(body.prompt, body.assistantSkillNames);
+  const effectivePrompt = applyAssistantContext(body.prompt, body.assistantSkillNames, body.assistantPersona);
 
   // Create session with external ID if provided
   const session = createSession({

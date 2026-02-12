@@ -8,6 +8,7 @@ export type AssistantConfig = {
   provider: "claude" | "codex";
   model?: string;
   skillNames?: string[];
+  persona?: string;
 };
 
 export type AssistantsConfig = {
@@ -19,23 +20,11 @@ const ASSISTANTS_FILE = join(app.getPath("userData"), "assistants-config.json");
 
 const DEFAULT_ASSISTANTS: AssistantConfig[] = [
   {
-    id: "study-tour-assistant",
-    name: "游学助理",
+    id: "default-assistant",
+    name: "小助理",
     provider: "claude",
-    skillNames: ["youtube-clipper"],
-  },
-  {
-    id: "picture-book-assistant",
-    name: "绘本馆助理",
-    provider: "claude",
-    skillNames: ["humanizer-zh"],
-  },
-  {
-    id: "marketing-assistant",
-    name: "市场助理",
-    provider: "codex",
-    model: "gpt-5.3-codex",
-    skillNames: ["sales-coach-lily"],
+    skillNames: [],
+    persona: "你是一个通用小助理，乐于帮忙，回答简洁实用。",
   },
 ];
 
@@ -63,6 +52,7 @@ function normalizeConfig(input?: Partial<AssistantsConfig> | null): AssistantsCo
       skillNames: Array.isArray(item.skillNames)
         ? item.skillNames.filter(Boolean).map((name) => String(name))
         : [],
+      persona: item.persona ? String(item.persona) : undefined,
     }));
 
   if (assistants.length === 0) {

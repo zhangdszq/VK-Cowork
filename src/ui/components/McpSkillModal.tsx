@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 
 // Skill categories with icons and colors
@@ -119,15 +119,28 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
   const [installing, setInstalling] = useState(false);
   const [installResult, setInstallResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Assistants state — for assigning skills to assistants
+  const [assistants, setAssistants] = useState<AssistantConfig[]>([]);
+  // After install: pick assistants to assign the newly installed skill
+  const [pendingSkillName, setPendingSkillName] = useState<string | null>(null);
+  const [assignSelection, setAssignSelection] = useState<Set<string>>(new Set());
+  // For existing skill cards: manage which assistants own the skill
+  const [managingSkillName, setManagingSkillName] = useState<string | null>(null);
+  const [manageSelection, setManageSelection] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
   const loadConfig = () => {
     setLoading(true);
-    window.electron.getClaudeConfig().then((config) => {
+    Promise.all([
+      window.electron.getClaudeConfig(),
+      window.electron.getAssistantsConfig(),
+    ]).then(([config, assistantsConfig]) => {
       setMcpServers(config.mcpServers);
       setSkills(config.skills);
+      setAssistants(assistantsConfig.assistants ?? []);
       setLoading(false);
     }).catch(() => {
       setLoading(false);
@@ -171,6 +184,12 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
       if (result.success) {
         setInstallUrl("");
         loadConfig();
+        // Show assistant assignment picker for the newly installed skill
+        if (result.skillName) {
+          setPendingSkillName(result.skillName);
+          // Pre-select all assistants
+          setAssignSelection(new Set(assistants.map((a) => a.id)));
+        }
       }
     } catch (err) {
       setInstallResult({ success: false, message: String(err) });
@@ -178,6 +197,36 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
       setInstalling(false);
     }
   };
+
+  // Assign a skill to selected assistants
+  const handleAssignSkill = useCallback(async (skillName: string, selectedIds: Set<string>) => {
+    const updated = assistants.map((a) => {
+      const currentSkills = a.skillNames ?? [];
+      const isSelected = selectedIds.has(a.id);
+      const hasSkill = currentSkills.includes(skillName);
+      if (isSelected && !hasSkill) {
+        return { ...a, skillNames: [...currentSkills, skillName] };
+      }
+      if (!isSelected && hasSkill) {
+        return { ...a, skillNames: currentSkills.filter((s) => s !== skillName) };
+      }
+      return a;
+    });
+    try {
+      const saved = await window.electron.saveAssistantsConfig({
+        assistants: updated,
+        defaultAssistantId: updated[0]?.id,
+      });
+      setAssistants(saved.assistants);
+    } catch (err) {
+      console.error("Failed to assign skill:", err);
+    }
+  }, [assistants]);
+
+  // Helper: get assistants that own a skill
+  const getSkillAssistants = useCallback((skillName: string) => {
+    return assistants.filter((a) => (a.skillNames ?? []).includes(skillName));
+  }, [assistants]);
 
   // Group skills by category
   const skillsByCategory = useMemo(() => {
@@ -333,6 +382,72 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
                   <p className="mt-2 text-[11px] text-muted-light">
                     技能将同时安装到 ~/.claude/skills/ 和 ~/.codex/skills/
                   </p>
+
+                  {/* Assistant assignment picker after successful install */}
+                  {pendingSkillName && (
+                    <div className="mt-3 rounded-xl border border-accent/20 bg-accent/5 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-ink-800">
+                          给哪些助理配置「{pendingSkillName}」？
+                        </span>
+                        <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={assignSelection.size === assistants.length && assistants.length > 0}
+                            onChange={(e) => {
+                              setAssignSelection(e.target.checked ? new Set(assistants.map((a) => a.id)) : new Set());
+                            }}
+                            className="h-3.5 w-3.5 rounded border-ink-900/20 text-accent focus:ring-accent/30"
+                          />
+                          全选
+                        </label>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {assistants.map((a) => {
+                          const checked = assignSelection.has(a.id);
+                          return (
+                            <label
+                              key={a.id}
+                              className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                                checked
+                                  ? "border-accent/40 bg-accent/10 text-ink-800"
+                                  : "border-ink-900/10 bg-white text-muted hover:border-ink-900/20"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  const next = new Set(assignSelection);
+                                  if (checked) next.delete(a.id); else next.add(a.id);
+                                  setAssignSelection(next);
+                                }}
+                                className="hidden"
+                              />
+                              {a.name}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            await handleAssignSkill(pendingSkillName, assignSelection);
+                            setPendingSkillName(null);
+                          }}
+                          className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
+                        >
+                          确认分配
+                        </button>
+                        <button
+                          onClick={() => setPendingSkillName(null)}
+                          className="rounded-lg border border-ink-900/10 px-4 py-1.5 text-xs text-muted hover:bg-surface-tertiary transition-colors"
+                        >
+                          跳过
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -450,14 +565,99 @@ export function McpSkillModal({ open, onOpenChange, initialTab = "mcp" }: McpSki
                               </p>
                             </div>
                             
+                            {/* Assistants assigned */}
+                            {(() => {
+                              const owners = getSkillAssistants(skill.name);
+                              const isManaging = managingSkillName === skill.name;
+                              return (
+                                <div className="mt-4">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {owners.length > 0 ? owners.map((a) => (
+                                        <span key={a.id} className="inline-flex items-center rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
+                                          {a.name}
+                                        </span>
+                                      )) : (
+                                        <span className="text-[10px] text-muted-light">未分配助理</span>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        if (isManaging) {
+                                          setManagingSkillName(null);
+                                        } else {
+                                          setManagingSkillName(skill.name);
+                                          setManageSelection(new Set(owners.map((a) => a.id)));
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-muted hover:bg-surface-tertiary hover:text-ink-700 transition-colors"
+                                    >
+                                      {isManaging ? "收起" : "分配"}
+                                    </button>
+                                  </div>
+                                  {isManaging && (
+                                    <div className="mt-2 rounded-xl border border-ink-900/10 bg-surface p-2.5">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] font-medium text-muted">选择助理</span>
+                                        <label className="flex items-center gap-1 text-[10px] text-muted cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={manageSelection.size === assistants.length && assistants.length > 0}
+                                            onChange={(e) => {
+                                              setManageSelection(e.target.checked ? new Set(assistants.map((a) => a.id)) : new Set());
+                                            }}
+                                            className="h-3 w-3 rounded border-ink-900/20 text-accent focus:ring-accent/30"
+                                          />
+                                          全选
+                                        </label>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {assistants.map((a) => {
+                                          const checked = manageSelection.has(a.id);
+                                          return (
+                                            <label
+                                              key={a.id}
+                                              className={`flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] transition-colors ${
+                                                checked
+                                                  ? "border-accent/40 bg-accent/10 text-ink-800"
+                                                  : "border-ink-900/10 bg-white text-muted hover:border-ink-900/20"
+                                              }`}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => {
+                                                  const next = new Set(manageSelection);
+                                                  if (checked) next.delete(a.id); else next.add(a.id);
+                                                  setManageSelection(next);
+                                                }}
+                                                className="hidden"
+                                              />
+                                              {a.name}
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+                                      <button
+                                        onClick={async () => {
+                                          await handleAssignSkill(skill.name, manageSelection);
+                                          setManagingSkillName(null);
+                                        }}
+                                        className="mt-2 w-full rounded-lg bg-accent px-3 py-1.5 text-[10px] font-medium text-white hover:bg-accent-hover transition-colors"
+                                      >
+                                        保存
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            
                             {/* Footer */}
-                            <div className="mt-4 flex items-center justify-between text-xs text-muted-light">
-                              <span className="font-mono truncate max-w-[60%]">
+                            <div className="mt-3 flex items-center text-[10px] text-muted-light">
+                              <span className="font-mono truncate">
                                 ~/.claude/skills/{skill.name}
                               </span>
-                              <button className="px-3 py-1.5 rounded-lg bg-accent/10 text-accent font-medium hover:bg-accent/20 transition-colors">
-                                查看详情
-                              </button>
                             </div>
                           </div>
                         );
